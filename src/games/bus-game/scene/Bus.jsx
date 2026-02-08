@@ -6,8 +6,9 @@ import { useBusGameStore } from '../store/busGameStore';
 
 // Our bus yellow to replace the model's white body panels
 const BUS_YELLOW = new THREE.Color(0xe8b400);
-// Model orientation offset — bus model faces along X, game expects Z
-const MODEL_ROTATION_Y = Math.PI / 2;
+// Bus model faces ~46° off-axis (toward -X,+Z); rotate to align with game's -Z forward
+// PCA of all vertices: forward angle α = -0.8015 rad → rotation = π - α = π + 0.8015 ≈ -2.34
+const MODEL_ROTATION_Y = -2.34;
 
 export default function Bus() {
   const ref = useRef();
@@ -24,7 +25,6 @@ export default function Bus() {
           child.material = child.material.clone();
           // Recolor the white body panels to our bus yellow
           // Model body is white: rgb(1.00, 1.00, 1.00)
-          // Also recolor the blue STM stripe: rgb(0.00, 0.34, 0.79) → red accent
           if (child.material.color) {
             const c = child.material.color;
             // White body panels → bus yellow
@@ -60,12 +60,9 @@ export default function Bus() {
     }
   });
 
-  // Bus model bbox: X=3.52, Y=1.12, Z=3.41
-  // Scale 2.5 → ~8.8 long, ~2.8 tall, ~8.5 wide → need rotation
-  // Model faces along X, rotate 90° so length aligns with Z
   return (
     <group ref={ref}>
-      <primitive object={busModel} scale={2.5} position={[0, 1.6, 0]} rotation={[0, MODEL_ROTATION_Y, 0]} />
+      <primitive object={busModel} scale={2.5} position={[0, 1.6, 0]} rotation={[0, MODEL_ROTATION_Y, 0.05]} />
     </group>
   );
 }

@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: development
-    container_name: dev-games-frontend
+    container_name: dev-games-frontend-r3f
     volumes:
       - .:/app
       - /app/node_modules

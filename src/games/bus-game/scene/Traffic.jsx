@@ -14,8 +14,8 @@ const NUM_TRAFFIC = 12;
 const MODEL_PATHS = ['/models/sedan.glb', '/models/suv.glb', '/models/hatchback.glb'];
 
 // Scale factors to match game-world car sizes
-// Kenney models are small (~2x1x1 units), scale up to match game world
-const MODEL_SCALES = [2.5, 2.6, 2.2];
+// Kenney models are chunky low-poly; keep them smaller relative to bus
+const MODEL_SCALES = [1.5, 1.6, 1.3];
 
 function positionOnSegment(tv) {
   const R = ROUTE;
