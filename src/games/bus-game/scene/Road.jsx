@@ -121,33 +121,70 @@ export default function Road() {
       items.push({ type: 'innerCurb', pos: [j.x, 0.18, j.z], radius: ringInner - 0.5 });
     }
 
-    // Side-road stubs
+    // Side-road stubs — offset origin to road edge for flush T-junctions
+    const HALF_ROAD = 7;
     for (const s of SIDE_ROADS) {
       const ang = s.angle;
+
+      // Find nearest route segment to get road tangent
+      let bestDist = Infinity, bestSeg = 0;
+      for (let i = 0; i < R.length - 1; i++) {
+        const dx = R[i + 1][0] - R[i][0], dz = R[i + 1][1] - R[i][1];
+        const len2 = dx * dx + dz * dz;
+        const t = len2 > 0 ? Math.max(0, Math.min(1, ((s.x - R[i][0]) * dx + (s.z - R[i][1]) * dz) / len2)) : 0;
+        const px = R[i][0] + t * dx, pz = R[i][1] + t * dz;
+        const d = Math.hypot(s.x - px, s.z - pz);
+        if (d < bestDist) { bestDist = d; bestSeg = i; }
+      }
+
+      // Road tangent from nearest segment (forward direction: sin/cos convention)
+      const rdx = R[bestSeg + 1][0] - R[bestSeg][0];
+      const rdz = R[bestSeg + 1][1] - R[bestSeg][1];
+      const rLen = Math.hypot(rdx, rdz) || 1;
+      const tanX = rdx / rLen, tanZ = rdz / rLen;
+
+      // Stub direction unit vector
+      const stubDirX = Math.sin(ang), stubDirZ = Math.cos(ang);
+
+      // Cross product to determine which side of the road the stub exits
+      // tanX*stubDirZ - tanZ*stubDirX: positive = stub goes right, negative = left
+      const cross = tanX * stubDirZ - tanZ * stubDirX;
+      const side = cross > 0 ? 1 : -1;
+
+      // Perpendicular to road tangent, pointing toward stub side
+      // Road perp right: (tanZ, -tanX), left: (-tanZ, tanX)
+      // Using the road's angle convention: perp is (cos(roadAng), -sin(roadAng)) for side=1
+      const perpX = side * tanZ;
+      const perpZ = side * -tanX;
+
+      // Offset origin from road center to road edge
+      const ox = s.x + perpX * HALF_ROAD;
+      const oz = s.z + perpZ * HALF_ROAD;
+
       const halfLen = s.length / 2;
-      const mx = s.x + Math.sin(ang) * halfLen;
-      const mz = s.z + Math.cos(ang) * halfLen;
+      const mx = ox + stubDirX * halfLen;
+      const mz = oz + stubDirZ * halfLen;
 
       // Road surface
       items.push({ type: 'road', pos: [mx, 0.07, mz], rot: ang, size: [14, 0.15, s.length] });
 
       // Sidewalks + curbs on both sides
-      for (const side of [-1, 1]) {
+      for (const sw of [-1, 1]) {
         items.push({
           type: 'swalk',
-          pos: [mx + Math.cos(ang) * side * 8.5, 0.14, mz - Math.sin(ang) * side * 8.5],
+          pos: [mx + Math.cos(ang) * sw * 8.5, 0.14, mz - Math.sin(ang) * sw * 8.5],
           rot: ang, size: [2.5, 0.28, s.length],
         });
         items.push({
           type: 'curb',
-          pos: [mx + Math.cos(ang) * side * 7.2, 0.12, mz - Math.sin(ang) * side * 7.2],
+          pos: [mx + Math.cos(ang) * sw * 7.2, 0.12, mz - Math.sin(ang) * sw * 7.2],
           rot: ang, size: [0.3, 0.25, s.length],
         });
       }
 
       // Dead-end cap at the far end
-      const endX = s.x + Math.sin(ang) * s.length;
-      const endZ = s.z + Math.cos(ang) * s.length;
+      const endX = ox + stubDirX * s.length;
+      const endZ = oz + stubDirZ * s.length;
       items.push({
         type: 'swalk',
         pos: [endX, 0.14, endZ],
