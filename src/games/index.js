@@ -1,3 +1,5 @@
+import { lazy } from 'react';
+
 export const games = [
   {
     slug: 'bus-game',
@@ -5,5 +7,6 @@ export const games = [
     description: 'Drive a city bus, pick up passengers, and navigate a busy route!',
     emoji: '\uD83D\uDE8C',
     color: 'from-green-400 to-emerald-600',
+    component: lazy(() => import('./bus-game/BusGame')),
   },
 ];
