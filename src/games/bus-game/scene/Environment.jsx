@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { ROUTE } from '../data/routeData';
 import { ptSegDist } from '../data/mathUtils';
+import { createGrassTexture } from './proceduralTextures';
 
 function Ground() {
   const geo = useMemo(() => {
@@ -22,9 +23,11 @@ function Ground() {
     return g;
   }, []);
 
+  const grassTex = useMemo(() => createGrassTexture(), []);
+
   return (
     <mesh geometry={geo} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <meshStandardMaterial color={0x4a8a4a} roughness={0.95} metalness={0} />
+      <meshStandardMaterial map={grassTex} roughness={0.95} metalness={0} />
     </mesh>
   );
 }

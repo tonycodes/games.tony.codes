@@ -16,6 +16,9 @@ import BusStops from './scene/BusStops';
 import Bus from './scene/Bus';
 import Traffic from './scene/Traffic';
 import GameCamera from './scene/GameCamera';
+import GradientSky from './scene/GradientSky';
+import PostProcessing from './scene/PostProcessing';
+import BusParticles from './scene/BusParticles';
 import GameController from './systems/GameController';
 
 import BusGameMenu from './ui/BusGameMenu';
@@ -67,6 +70,7 @@ export default function BusGame() {
         }}
       >
         <BusGameScene>
+          <GradientSky />
           <Environment />
           <Road />
           <Buildings obstaclesRef={obstaclesRef} />
@@ -74,8 +78,10 @@ export default function BusGame() {
           <StreetLights />
           <BusStops obstaclesRef={obstaclesRef} />
           <Bus />
+          <BusParticles />
           <Traffic trafficRef={trafficRef} />
           <GameCamera />
+          <PostProcessing />
           <GameController
             keysRef={keysRef}
             audioRef={audioRef}

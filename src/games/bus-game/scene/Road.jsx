@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { ROUTE } from '../data/routeData';
+import { createAsphaltTexture } from './proceduralTextures';
 
-const roadMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.85, metalness: 0.05 });
+const asphaltTex = createAsphaltTexture();
+const roadMat = new THREE.MeshStandardMaterial({ map: asphaltTex, roughness: 0.85, metalness: 0.05 });
 const swalkMat = new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.75, metalness: 0.02 });
 const dashMat = new THREE.MeshStandardMaterial({ color: 0xcccc44, roughness: 0.5, emissive: 0x333300, emissiveIntensity: 0.1 });
 const edgeMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.6 });

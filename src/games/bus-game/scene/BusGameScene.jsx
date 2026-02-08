@@ -14,7 +14,7 @@ export default function BusGameScene({ children }) {
       }}
       camera={{ fov: 50, near: 0.5, far: 700, position: [0, 20, 100] }}
     >
-      <color attach="background" args={[0x6ab4d6]} />
+      <color attach="background" args={[0x1a5276]} />
       <fogExp2 attach="fog" args={[0x9dc8db, 0.0018]} />
       {children}
     </Canvas>
