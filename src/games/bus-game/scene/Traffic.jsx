@@ -10,128 +10,10 @@ const carWhMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.
 const carTailMat = new THREE.MeshStandardMaterial({ color: 0xff2200, emissive: 0xff1100, emissiveIntensity: 0.4, roughness: 0.2 });
 const carHeadMat = new THREE.MeshStandardMaterial({ color: 0xffffee, emissive: 0xffffaa, emissiveIntensity: 0.5, roughness: 0.1 });
 const carDarkMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6, metalness: 0.2 });
+const carHubMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.3, metalness: 0.5 });
 const carColors = [0xcc3333, 0x3366cc, 0x33aa55, 0xeeeeee, 0x222222, 0x888888, 0xdd8800, 0x6633aa, 0x44aaaa, 0xaa3366];
 
 const NUM_TRAFFIC = 12;
-
-// Car body profile shapes (extruded cross-sections) — created once
-// Type 0: Sedan — lower body + cabin with sloped hood/trunk
-function createSedanGeo() {
-  // Lower body: rounded rectangle
-  const bodyShape = new THREE.Shape();
-  const bw = 1.0, bh = 0.7, br = 0.12;
-  bodyShape.moveTo(-bw + br, 0);
-  bodyShape.lineTo(bw - br, 0);
-  bodyShape.quadraticCurveTo(bw, 0, bw, br);
-  bodyShape.lineTo(bw, bh);
-  bodyShape.lineTo(-bw, bh);
-  bodyShape.lineTo(-bw, br);
-  bodyShape.quadraticCurveTo(-bw, 0, -bw + br, 0);
-  const bodyGeo = new THREE.ExtrudeGeometry(bodyShape, { depth: 4.0, bevelEnabled: false });
-  bodyGeo.translate(0, 0, -2.0);
-  bodyGeo.computeVertexNormals();
-
-  // Cabin: trapezoidal cross-section (narrower at top)
-  const cabShape = new THREE.Shape();
-  cabShape.moveTo(-0.9, 0);
-  cabShape.lineTo(0.9, 0);
-  cabShape.lineTo(0.75, 0.75);
-  cabShape.quadraticCurveTo(0, 0.82, -0.75, 0.75);
-  cabShape.closePath();
-  const cabGeo = new THREE.ExtrudeGeometry(cabShape, { depth: 2.2, bevelEnabled: false });
-  cabGeo.translate(0, 0, -1.0);
-  cabGeo.computeVertexNormals();
-
-  return { bodyGeo, cabGeo };
-}
-
-// Type 1: SUV/Van — taller, boxier but still with rounded edges
-function createSUVGeo() {
-  const bodyShape = new THREE.Shape();
-  const bw = 1.05, bh = 0.9, br = 0.15;
-  bodyShape.moveTo(-bw + br, 0);
-  bodyShape.lineTo(bw - br, 0);
-  bodyShape.quadraticCurveTo(bw, 0, bw, br);
-  bodyShape.lineTo(bw, bh);
-  bodyShape.lineTo(-bw, bh);
-  bodyShape.lineTo(-bw, br);
-  bodyShape.quadraticCurveTo(-bw, 0, -bw + br, 0);
-  const bodyGeo = new THREE.ExtrudeGeometry(bodyShape, { depth: 4.5, bevelEnabled: false });
-  bodyGeo.translate(0, 0, -2.25);
-  bodyGeo.computeVertexNormals();
-
-  // Taller cabin with slight taper
-  const cabShape = new THREE.Shape();
-  cabShape.moveTo(-0.95, 0);
-  cabShape.lineTo(0.95, 0);
-  cabShape.lineTo(0.88, 0.85);
-  cabShape.quadraticCurveTo(0, 0.92, -0.88, 0.85);
-  cabShape.closePath();
-  const cabGeo = new THREE.ExtrudeGeometry(cabShape, { depth: 3.0, bevelEnabled: false });
-  cabGeo.translate(0, 0, -1.3);
-  cabGeo.computeVertexNormals();
-
-  return { bodyGeo, cabGeo };
-}
-
-// Type 2: Compact — small, rounded
-function createCompactGeo() {
-  const bodyShape = new THREE.Shape();
-  const bw = 0.85, bh = 0.6, br = 0.1;
-  bodyShape.moveTo(-bw + br, 0);
-  bodyShape.lineTo(bw - br, 0);
-  bodyShape.quadraticCurveTo(bw, 0, bw, br);
-  bodyShape.lineTo(bw, bh);
-  bodyShape.lineTo(-bw, bh);
-  bodyShape.lineTo(-bw, br);
-  bodyShape.quadraticCurveTo(-bw, 0, -bw + br, 0);
-  const bodyGeo = new THREE.ExtrudeGeometry(bodyShape, { depth: 3.2, bevelEnabled: false });
-  bodyGeo.translate(0, 0, -1.6);
-  bodyGeo.computeVertexNormals();
-
-  // Bubbly cabin
-  const cabShape = new THREE.Shape();
-  cabShape.moveTo(-0.75, 0);
-  cabShape.lineTo(0.75, 0);
-  cabShape.lineTo(0.6, 0.65);
-  cabShape.quadraticCurveTo(0, 0.72, -0.6, 0.65);
-  cabShape.closePath();
-  const cabGeo = new THREE.ExtrudeGeometry(cabShape, { depth: 1.8, bevelEnabled: false });
-  cabGeo.translate(0, 0, -0.75);
-  cabGeo.computeVertexNormals();
-
-  return { bodyGeo, cabGeo };
-}
-
-// Windshield shapes per type (trapezoidal)
-function createWindshieldGeo(type) {
-  const shape = new THREE.Shape();
-  if (type === 0) {
-    shape.moveTo(-0.8, 0); shape.lineTo(0.8, 0);
-    shape.lineTo(0.65, 0.65); shape.lineTo(-0.65, 0.65);
-  } else if (type === 1) {
-    shape.moveTo(-0.85, 0); shape.lineTo(0.85, 0);
-    shape.lineTo(0.78, 0.75); shape.lineTo(-0.78, 0.75);
-  } else {
-    shape.moveTo(-0.65, 0); shape.lineTo(0.65, 0);
-    shape.lineTo(0.52, 0.55); shape.lineTo(-0.52, 0.55);
-  }
-  shape.closePath();
-  return new THREE.ShapeGeometry(shape);
-}
-
-// Pre-create shared geometries
-const sedanGeos = createSedanGeo();
-const suvGeos = createSUVGeo();
-const compactGeos = createCompactGeo();
-const windshieldGeos = [createWindshieldGeo(0), createWindshieldGeo(1), createWindshieldGeo(2)];
-
-const typeGeos = [sedanGeos, suvGeos, compactGeos];
-const typeDims = [
-  { cabY: 0.7, cabZ: 0.1, frontZ: -2.01, rearZ: 2.01, hlW: 0.7, wZ: 1.3, wR: 0.35, wX: 1.05, wsY: 1.05, wsZ: -0.98 },
-  { cabY: 0.9, cabZ: 0.2, frontZ: -2.26, rearZ: 2.26, hlW: 0.8, wZ: 1.5, wR: 0.4, wX: 1.1, wsY: 1.35, wsZ: -1.28 },
-  { cabY: 0.6, cabZ: 0.15, frontZ: -1.61, rearZ: 1.61, hlW: 0.6, wZ: 1.0, wR: 0.35, wX: 0.9, wsY: 0.9, wsZ: -0.73 },
-];
 
 function positionOnSegment(tv) {
   const R = ROUTE;
@@ -149,6 +31,224 @@ function positionOnSegment(tv) {
   tv.wx = posX; tv.wz = posZ; tv.ang = carAng;
   return { posX, posZ, carAng };
 }
+
+// Sedan — like a Toyota Camry: distinct hood, cabin, trunk
+function Sedan({ bodyMat }) {
+  return (
+    <>
+      {/* Lower body — full length */}
+      <mesh position={[0, 0.5, 0]} castShadow material={bodyMat}>
+        <boxGeometry args={[2.0, 0.6, 4.0]} />
+      </mesh>
+      {/* Hood — sloped front section */}
+      <mesh position={[0, 0.9, -1.3]} castShadow material={bodyMat}>
+        <boxGeometry args={[1.9, 0.25, 1.2]} />
+      </mesh>
+      {/* Cabin — taller center section */}
+      <mesh position={[0, 1.15, 0.1]} castShadow material={bodyMat}>
+        <boxGeometry args={[1.8, 0.8, 2.0]} />
+      </mesh>
+      {/* Trunk — shorter rear section */}
+      <mesh position={[0, 0.9, 1.4]} castShadow material={bodyMat}>
+        <boxGeometry args={[1.9, 0.2, 1.0]} />
+      </mesh>
+      {/* Windshield — raked */}
+      <mesh position={[0, 1.25, -0.88]} rotation={[0.35, 0, 0]} material={carGlassMat}>
+        <planeGeometry args={[1.6, 0.75]} />
+      </mesh>
+      {/* Rear window — less raked */}
+      <mesh position={[0, 1.25, 1.1]} rotation={[-0.4, Math.PI, 0]} material={carGlassMat}>
+        <planeGeometry args={[1.5, 0.6]} />
+      </mesh>
+      {/* Side windows */}
+      {[-1, 1].map(s => (
+        <mesh key={`sw-${s}`} position={[s * 0.91, 1.2, 0.1]} rotation={[0, s * Math.PI / 2, 0]} material={carGlassMat}>
+          <planeGeometry args={[1.6, 0.6]} />
+        </mesh>
+      ))}
+      {/* Front bumper */}
+      <mesh position={[0, 0.25, -2.02]} material={carDarkMat}>
+        <boxGeometry args={[2.0, 0.2, 0.12]} />
+      </mesh>
+      {/* Rear bumper */}
+      <mesh position={[0, 0.25, 2.02]} material={carDarkMat}>
+        <boxGeometry args={[2.0, 0.2, 0.12]} />
+      </mesh>
+      {/* Headlights */}
+      {[-1, 1].map(s => (
+        <mesh key={`hl-${s}`} position={[s * 0.75, 0.7, -2.01]} material={carHeadMat}>
+          <sphereGeometry args={[0.12, 6, 4]} />
+        </mesh>
+      ))}
+      {/* Tail lights */}
+      {[-1, 1].map(s => (
+        <mesh key={`tl-${s}`} position={[s * 0.75, 0.7, 2.01]} material={carTailMat}>
+          <boxGeometry args={[0.3, 0.15, 0.05]} />
+        </mesh>
+      ))}
+      {/* Wheels */}
+      {[-1, 1].map(ws =>
+        [-1.3, 1.3].map(wz => (
+          <group key={`wh-${ws}-${wz}`}>
+            <mesh position={[ws * 0.85, 0.32, wz]} rotation={[0, 0, Math.PI / 2]} castShadow material={carWhMat}>
+              <torusGeometry args={[0.22, 0.12, 6, 10]} />
+            </mesh>
+            <mesh position={[ws * 0.9, 0.32, wz]} rotation={[0, 0, Math.PI / 2]} material={carHubMat}>
+              <cylinderGeometry args={[0.12, 0.12, 0.12, 6]} />
+            </mesh>
+          </group>
+        ))
+      )}
+    </>
+  );
+}
+
+// SUV — like a Toyota RAV4: taller, upright, bigger wheels
+function SUV({ bodyMat }) {
+  return (
+    <>
+      {/* Lower body — raised, full length */}
+      <mesh position={[0, 0.7, 0]} castShadow material={bodyMat}>
+        <boxGeometry args={[2.1, 0.7, 4.5]} />
+      </mesh>
+      {/* Hood section */}
+      <mesh position={[0, 1.15, -1.3]} castShadow material={bodyMat}>
+        <boxGeometry args={[2.0, 0.3, 1.6]} />
+      </mesh>
+      {/* Cabin — tall, upright, extends most of the length */}
+      <mesh position={[0, 1.5, 0.3]} castShadow material={bodyMat}>
+        <boxGeometry args={[1.9, 0.9, 2.8]} />
+      </mesh>
+      {/* Roof rack hint */}
+      <mesh position={[0, 1.97, 0.3]} material={carDarkMat}>
+        <boxGeometry args={[1.6, 0.04, 2.4]} />
+      </mesh>
+      {/* Windshield */}
+      <mesh position={[0, 1.55, -1.08]} rotation={[0.2, 0, 0]} material={carGlassMat}>
+        <planeGeometry args={[1.7, 0.85]} />
+      </mesh>
+      {/* Rear window — upright */}
+      <mesh position={[0, 1.55, 1.72]} rotation={[-0.15, Math.PI, 0]} material={carGlassMat}>
+        <planeGeometry args={[1.6, 0.7]} />
+      </mesh>
+      {/* Side windows */}
+      {[-1, 1].map(s => (
+        <mesh key={`sw-${s}`} position={[s * 0.96, 1.55, 0.3]} rotation={[0, s * Math.PI / 2, 0]} material={carGlassMat}>
+          <planeGeometry args={[2.4, 0.7]} />
+        </mesh>
+      ))}
+      {/* Front bumper with skid plate */}
+      <mesh position={[0, 0.32, -2.27]} material={carDarkMat}>
+        <boxGeometry args={[2.1, 0.25, 0.15]} />
+      </mesh>
+      <mesh position={[0, 0.2, -2.3]} material={carHubMat}>
+        <boxGeometry args={[1.4, 0.08, 0.08]} />
+      </mesh>
+      {/* Rear bumper */}
+      <mesh position={[0, 0.32, 2.27]} material={carDarkMat}>
+        <boxGeometry args={[2.1, 0.25, 0.15]} />
+      </mesh>
+      {/* Headlights */}
+      {[-1, 1].map(s => (
+        <mesh key={`hl-${s}`} position={[s * 0.8, 0.85, -2.26]} material={carHeadMat}>
+          <sphereGeometry args={[0.14, 6, 4]} />
+        </mesh>
+      ))}
+      {/* Tail lights — taller */}
+      {[-1, 1].map(s => (
+        <mesh key={`tl-${s}`} position={[s * 0.85, 1.2, 2.26]} material={carTailMat}>
+          <boxGeometry args={[0.2, 0.4, 0.05]} />
+        </mesh>
+      ))}
+      {/* Wheels — bigger */}
+      {[-1, 1].map(ws =>
+        [-1.5, 1.5].map(wz => (
+          <group key={`wh-${ws}-${wz}`}>
+            <mesh position={[ws * 0.9, 0.38, wz]} rotation={[0, 0, Math.PI / 2]} castShadow material={carWhMat}>
+              <torusGeometry args={[0.28, 0.14, 6, 10]} />
+            </mesh>
+            <mesh position={[ws * 0.95, 0.38, wz]} rotation={[0, 0, Math.PI / 2]} material={carHubMat}>
+              <cylinderGeometry args={[0.15, 0.15, 0.14, 6]} />
+            </mesh>
+          </group>
+        ))
+      )}
+    </>
+  );
+}
+
+// Compact — like a VW Golf: short, rounded, hatchback
+function Compact({ bodyMat }) {
+  return (
+    <>
+      {/* Lower body */}
+      <mesh position={[0, 0.48, 0]} castShadow material={bodyMat}>
+        <boxGeometry args={[1.7, 0.55, 3.2]} />
+      </mesh>
+      {/* Short hood */}
+      <mesh position={[0, 0.82, -0.95]} castShadow material={bodyMat}>
+        <boxGeometry args={[1.6, 0.2, 1.1]} />
+      </mesh>
+      {/* Cabin — rounded, hatchback style (taller at front, tapers to rear) */}
+      <mesh position={[0, 1.05, 0.15]} castShadow material={bodyMat}>
+        <boxGeometry args={[1.6, 0.65, 1.8]} />
+      </mesh>
+      {/* Hatch rear slope */}
+      <mesh position={[0, 0.92, 1.15]} castShadow material={bodyMat}>
+        <boxGeometry args={[1.6, 0.4, 0.5]} />
+      </mesh>
+      {/* Windshield */}
+      <mesh position={[0, 1.1, -0.73]} rotation={[0.3, 0, 0]} material={carGlassMat}>
+        <planeGeometry args={[1.4, 0.6]} />
+      </mesh>
+      {/* Rear hatch window */}
+      <mesh position={[0, 1.1, 1.35]} rotation={[-0.35, Math.PI, 0]} material={carGlassMat}>
+        <planeGeometry args={[1.3, 0.5]} />
+      </mesh>
+      {/* Side windows */}
+      {[-1, 1].map(s => (
+        <mesh key={`sw-${s}`} position={[s * 0.81, 1.1, 0.15]} rotation={[0, s * Math.PI / 2, 0]} material={carGlassMat}>
+          <planeGeometry args={[1.5, 0.5]} />
+        </mesh>
+      ))}
+      {/* Front bumper */}
+      <mesh position={[0, 0.22, -1.62]} material={carDarkMat}>
+        <boxGeometry args={[1.7, 0.18, 0.1]} />
+      </mesh>
+      {/* Rear bumper */}
+      <mesh position={[0, 0.22, 1.62]} material={carDarkMat}>
+        <boxGeometry args={[1.7, 0.18, 0.1]} />
+      </mesh>
+      {/* Headlights */}
+      {[-1, 1].map(s => (
+        <mesh key={`hl-${s}`} position={[s * 0.65, 0.6, -1.61]} material={carHeadMat}>
+          <sphereGeometry args={[0.1, 6, 4]} />
+        </mesh>
+      ))}
+      {/* Tail lights */}
+      {[-1, 1].map(s => (
+        <mesh key={`tl-${s}`} position={[s * 0.65, 0.6, 1.61]} material={carTailMat}>
+          <boxGeometry args={[0.2, 0.15, 0.05]} />
+        </mesh>
+      ))}
+      {/* Wheels */}
+      {[-1, 1].map(ws =>
+        [-1.0, 1.0].map(wz => (
+          <group key={`wh-${ws}-${wz}`}>
+            <mesh position={[ws * 0.72, 0.3, wz]} rotation={[0, 0, Math.PI / 2]} castShadow material={carWhMat}>
+              <torusGeometry args={[0.2, 0.11, 6, 10]} />
+            </mesh>
+            <mesh position={[ws * 0.77, 0.3, wz]} rotation={[0, 0, Math.PI / 2]} material={carHubMat}>
+              <cylinderGeometry args={[0.1, 0.1, 0.1, 6]} />
+            </mesh>
+          </group>
+        ))
+      )}
+    </>
+  );
+}
+
+const CarComponents = [Sedan, SUV, Compact];
 
 export default function Traffic({ trafficRef }) {
   const meshRefs = useRef([]);
@@ -257,58 +357,10 @@ export default function Traffic({ trafficRef }) {
     <group>
       {initData.map((tv, i) => {
         const bodyMat = new THREE.MeshStandardMaterial({ color: tv.color, roughness: 0.35, metalness: 0.2 });
-        const type = tv.type;
-        const geos = typeGeos[type];
-        const dims = typeDims[type];
+        const CarComponent = CarComponents[tv.type];
         return (
           <group key={i} ref={(el) => { meshRefs.current[i] = el; }} position={[tv.wx, 0, tv.wz]} rotation={[0, tv.ang, 0]}>
-            {/* Lower body — extruded rounded profile */}
-            <mesh position={[0, 0.3, 0]} castShadow geometry={geos.bodyGeo} material={bodyMat} />
-            {/* Cabin — extruded tapered profile */}
-            <mesh position={[0, 0.3 + dims.cabY, dims.cabZ]} castShadow geometry={geos.cabGeo} material={bodyMat} />
-            {/* Windshield */}
-            <mesh
-              position={[0, dims.wsY, dims.wsZ]}
-              rotation={[0.15, 0, 0]}
-              geometry={windshieldGeos[type]}
-              material={carGlassMat}
-            />
-            {/* Rear window */}
-            <mesh
-              position={[0, dims.wsY, -dims.wsZ]}
-              rotation={[-0.1, Math.PI, 0]}
-              geometry={windshieldGeos[type]}
-              material={carGlassMat}
-            />
-            {/* Front bumper */}
-            <mesh position={[0, 0.25, dims.frontZ]} material={carDarkMat}>
-              <boxGeometry args={[dims.hlW * 2.6, 0.18, 0.12]} />
-            </mesh>
-            {/* Headlights */}
-            {[-1, 1].map(hs => (
-              <mesh key={`hl-${hs}`} position={[hs * dims.hlW, 0.55, dims.frontZ]} material={carHeadMat}>
-                <sphereGeometry args={[0.12, 6, 4]} />
-              </mesh>
-            ))}
-            {/* Tail lights */}
-            {[-1, 1].map(ts => (
-              <mesh key={`tl-${ts}`} position={[ts * dims.hlW, 0.55, dims.rearZ]} material={carTailMat}>
-                <sphereGeometry args={[0.1, 6, 4]} />
-              </mesh>
-            ))}
-            {/* Wheels — torus tires */}
-            {[-1, 1].map(wside =>
-              [-1, 1].map(wend => (
-                <group key={`wh-${wside}-${wend}`}>
-                  <mesh position={[wside * dims.wX, dims.wR, wend * dims.wZ]} rotation={[0, 0, Math.PI / 2]} castShadow material={carWhMat}>
-                    <torusGeometry args={[dims.wR * 0.65, dims.wR * 0.4, 6, 10]} />
-                  </mesh>
-                  <mesh position={[wside * dims.wX, dims.wR, wend * dims.wZ]} rotation={[0, 0, Math.PI / 2]} material={carDarkMat}>
-                    <cylinderGeometry args={[dims.wR * 0.3, dims.wR * 0.3, 0.15, 6]} />
-                  </mesh>
-                </group>
-              ))
-            )}
+            <CarComponent bodyMat={bodyMat} />
           </group>
         );
       })}
