@@ -102,7 +102,7 @@ export default function Road() {
     for (const j of JUNCTIONS) {
       const ringR = j.radius; // outer radius of ring road
       const ringInner = j.radius - 7; // inner radius of ring road
-      const segments = 20;
+      const segments = 12;
 
       // Ring road segments (boxes arranged in a circle)
       for (let s = 0; s < segments; s++) {

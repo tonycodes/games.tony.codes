@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { ROUTE, BOUNDS, JUNCTIONS, SIDE_ROADS } from '../data/routeData';
+import { ROUTE, JUNCTIONS, SIDE_ROADS } from '../data/routeData';
 import { dd, nearRoad } from '../data/mathUtils';
 
 const bMats = [
@@ -94,10 +94,15 @@ export default function Buildings({ obstaclesRef }) {
       }
     }
 
-    // Random extra buildings
+    // Random extra buildings — scatter near route extent, not full BOUNDS
+    let rMinX = Infinity, rMaxX = -Infinity, rMinZ = Infinity, rMaxZ = -Infinity;
+    for (const p of R) {
+      if (p[0] < rMinX) rMinX = p[0]; if (p[0] > rMaxX) rMaxX = p[0];
+      if (p[1] < rMinZ) rMinZ = p[1]; if (p[1] > rMaxZ) rMaxZ = p[1];
+    }
     for (let i = 0; i < 45; i++) {
-      const bx = BOUNDS.minX + 30 + Math.random() * (BOUNDS.maxX - BOUNDS.minX - 60);
-      const bz = BOUNDS.minZ + 30 + Math.random() * (BOUNDS.maxZ - BOUNDS.minZ - 60);
+      const bx = rMinX - 40 + Math.random() * (rMaxX - rMinX + 80);
+      const bz = rMinZ - 40 + Math.random() * (rMaxZ - rMinZ + 80);
       if (!canPlace(bx, bz)) continue;
       const bh = 5 + Math.random() * 16;
       const bw = 5 + Math.random() * 7;

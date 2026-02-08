@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { ROUTE, BOUNDS, JUNCTIONS, SIDE_ROADS } from '../data/routeData';
+import { ROUTE, JUNCTIONS, SIDE_ROADS } from '../data/routeData';
 import { dd, nearRoad } from '../data/mathUtils';
 import Buildings from './Buildings';
 
@@ -18,9 +18,15 @@ export default function Trees({ obstaclesRef }) {
     const trees = [];
     const obstacles = [];
 
+    // Scatter near route extent, not full BOUNDS
+    let rMinX = Infinity, rMaxX = -Infinity, rMinZ = Infinity, rMaxZ = -Infinity;
+    for (const p of R) {
+      if (p[0] < rMinX) rMinX = p[0]; if (p[0] > rMaxX) rMaxX = p[0];
+      if (p[1] < rMinZ) rMinZ = p[1]; if (p[1] > rMaxZ) rMaxZ = p[1];
+    }
     for (let i = 0; i < 70; i++) {
-      const tx = BOUNDS.minX + 30 + Math.random() * (BOUNDS.maxX - BOUNDS.minX - 60);
-      const tz = BOUNDS.minZ + 30 + Math.random() * (BOUNDS.maxZ - BOUNDS.minZ - 60);
+      const tx = rMinX - 30 + Math.random() * (rMaxX - rMinX + 60);
+      const tz = rMinZ - 30 + Math.random() * (rMaxZ - rMinZ + 60);
       if (nearRoad(R, tx, tz, 14)) continue;
 
       let treeOk = true;
