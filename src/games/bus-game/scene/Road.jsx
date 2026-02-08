@@ -131,49 +131,15 @@ export default function Road() {
       items.push({ type: 'innerCurb', pos: [j.x, 0.18, j.z], radius: ringInner - 0.5 });
     }
 
-    // Side-road stubs — offset origin to road edge for flush T-junctions
-    const HALF_ROAD = 7;
+    // Side-road stubs — origins pre-offset to road edge by generator
     for (const s of SIDE_ROADS) {
       const ang = s.angle;
-
-      // Find nearest route segment to get road tangent
-      let bestDist = Infinity, bestSeg = 0;
-      for (let i = 0; i < R.length - 1; i++) {
-        const dx = R[i + 1][0] - R[i][0], dz = R[i + 1][1] - R[i][1];
-        const len2 = dx * dx + dz * dz;
-        const t = len2 > 0 ? Math.max(0, Math.min(1, ((s.x - R[i][0]) * dx + (s.z - R[i][1]) * dz) / len2)) : 0;
-        const px = R[i][0] + t * dx, pz = R[i][1] + t * dz;
-        const d = Math.hypot(s.x - px, s.z - pz);
-        if (d < bestDist) { bestDist = d; bestSeg = i; }
-      }
-
-      // Road tangent from nearest segment (forward direction: sin/cos convention)
-      const rdx = R[bestSeg + 1][0] - R[bestSeg][0];
-      const rdz = R[bestSeg + 1][1] - R[bestSeg][1];
-      const rLen = Math.hypot(rdx, rdz) || 1;
-      const tanX = rdx / rLen, tanZ = rdz / rLen;
-
-      // Stub direction unit vector
       const stubDirX = Math.sin(ang), stubDirZ = Math.cos(ang);
 
-      // Cross product to determine which side of the road the stub exits
-      // tanX*stubDirZ - tanZ*stubDirX: positive = stub goes right, negative = left
-      const cross = tanX * stubDirZ - tanZ * stubDirX;
-      const side = cross > 0 ? 1 : -1;
-
-      // Perpendicular to road tangent, pointing toward stub side
-      // Road perp right: (tanZ, -tanX), left: (-tanZ, tanX)
-      // Using the road's angle convention: perp is (cos(roadAng), -sin(roadAng)) for side=1
-      const perpX = side * tanZ;
-      const perpZ = side * -tanX;
-
-      // Offset origin from road center to road edge
-      const ox = s.x + perpX * HALF_ROAD;
-      const oz = s.z + perpZ * HALF_ROAD;
-
+      // s.x, s.z is already offset to the road edge (past sidewalks)
       const halfLen = s.length / 2;
-      const mx = ox + stubDirX * halfLen;
-      const mz = oz + stubDirZ * halfLen;
+      const mx = s.x + stubDirX * halfLen;
+      const mz = s.z + stubDirZ * halfLen;
 
       // Road surface
       items.push({ type: 'road', pos: [mx, 0.07, mz], rot: ang, size: [14, 0.15, s.length] });
@@ -193,8 +159,8 @@ export default function Road() {
       }
 
       // Dead-end cap at the far end
-      const endX = ox + stubDirX * s.length;
-      const endZ = oz + stubDirZ * s.length;
+      const endX = s.x + stubDirX * s.length;
+      const endZ = s.z + stubDirZ * s.length;
       items.push({
         type: 'swalk',
         pos: [endX, 0.14, endZ],

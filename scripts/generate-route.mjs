@@ -626,9 +626,46 @@ function detectJunctionsAndStubs(nodes, adj, fullNodePath, gameRoute, routeLatLn
       // Vary length: 20-35 based on position for visual variety
       const stubLen = 20 + Math.round(((Math.abs(fromGX * 7 + fromGZ * 13)) % 15));
 
+      // Compute road tangent from adjacent route nodes to offset stub to road edge
+      const EDGE_OFFSET = 10; // past sidewalk zone (road half=7, sidewalk edge ~9.75)
+      let prevRI = Math.max(0, ri - 1);
+      let nextRI = Math.min(fullNodePath.length - 1, ri + 1);
+      const prevNode = nodes.get(fullNodePath[prevRI]);
+      const nextNode = nodes.get(fullNodePath[nextRI]);
+
+      let offX = fromGX, offZ = fromGZ;
+      if (prevNode && nextNode && prevRI !== nextRI) {
+        const pRawX = (prevNode.lon - lng0) * cosLat * 111320;
+        const pRawZ = -(prevNode.lat - lat0) * 111320;
+        const pGX = (pRawX - cx) * scale;
+        const pGZ = (pRawZ - cz) * scale;
+
+        const nRawX = (nextNode.lon - lng0) * cosLat * 111320;
+        const nRawZ = -(nextNode.lat - lat0) * 111320;
+        const nGX = (nRawX - cx) * scale;
+        const nGZ = (nRawZ - cz) * scale;
+
+        // Road tangent (forward direction)
+        const tanX = nGX - pGX, tanZ = nGZ - pGZ;
+        const tanLen = Math.hypot(tanX, tanZ);
+        if (tanLen > 0.1) {
+          const tux = tanX / tanLen, tuz = tanZ / tanLen;
+          // Stub direction unit vector
+          const stubUX = sdx / sideLen, stubUZ = sdz / sideLen;
+          // Cross product determines which side: tan x stub
+          const cross = tux * stubUZ - tuz * stubUX;
+          const side = cross > 0 ? 1 : -1;
+          // Perpendicular toward stub side: right of tangent = (tanZ, -tanX)/len
+          const perpX = side * tuz;
+          const perpZ = side * -tux;
+          offX = fromGX + perpX * EDGE_OFFSET;
+          offZ = fromGZ + perpZ * EDGE_OFFSET;
+        }
+      }
+
       stubs.push({
-        x: Math.round(fromGX * 10) / 10,
-        z: Math.round(fromGZ * 10) / 10,
+        x: Math.round(offX * 10) / 10,
+        z: Math.round(offZ * 10) / 10,
         angle: Math.round(angle * 1000) / 1000,
         length: stubLen,
       });
