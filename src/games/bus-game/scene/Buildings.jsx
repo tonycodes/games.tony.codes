@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { ROUTE } from '../data/routeData';
+import { ROUTE, BOUNDS, JUNCTIONS, SIDE_ROADS } from '../data/routeData';
 import { dd, nearRoad } from '../data/mathUtils';
 
 const bMats = [
@@ -29,6 +29,20 @@ export default function Buildings({ obstaclesRef }) {
     function canPlace(bx, bz) {
       if (nearRoad(R, bx, bz, 18)) return false;
       for (let ii = 0; ii < placed.length; ii++) if (dd(bx, bz, placed[ii][0], placed[ii][1]) < 13) return false;
+      // Exclude roundabout zones
+      for (const j of JUNCTIONS) {
+        if (dd(bx, bz, j.x, j.z) < j.radius + 12) return false;
+      }
+      // Exclude side-road stub centerlines
+      for (const s of SIDE_ROADS) {
+        const endX = s.x + Math.sin(s.angle) * s.length;
+        const endZ = s.z + Math.cos(s.angle) * s.length;
+        // Point-to-segment distance check
+        const dx = endX - s.x, dz = endZ - s.z, len2 = dx * dx + dz * dz;
+        const t = len2 > 0 ? Math.max(0, Math.min(1, ((bx - s.x) * dx + (bz - s.z) * dz) / len2)) : 0;
+        const dist = dd(bx, bz, s.x + t * dx, s.z + t * dz);
+        if (dist < 18) return false;
+      }
       return true;
     }
 
@@ -82,8 +96,8 @@ export default function Buildings({ obstaclesRef }) {
 
     // Random extra buildings
     for (let i = 0; i < 45; i++) {
-      const bx = -130 + Math.random() * 460;
-      const bz = -190 + Math.random() * 400;
+      const bx = BOUNDS.minX + 30 + Math.random() * (BOUNDS.maxX - BOUNDS.minX - 60);
+      const bz = BOUNDS.minZ + 30 + Math.random() * (BOUNDS.maxZ - BOUNDS.minZ - 60);
       if (!canPlace(bx, bz)) continue;
       const bh = 5 + Math.random() * 16;
       const bw = 5 + Math.random() * 7;

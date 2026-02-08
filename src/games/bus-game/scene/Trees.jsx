@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { ROUTE } from '../data/routeData';
+import { ROUTE, BOUNDS, JUNCTIONS, SIDE_ROADS } from '../data/routeData';
 import { dd, nearRoad } from '../data/mathUtils';
 import Buildings from './Buildings';
 
@@ -19,8 +19,8 @@ export default function Trees({ obstaclesRef }) {
     const obstacles = [];
 
     for (let i = 0; i < 70; i++) {
-      const tx = -90 + Math.random() * 380;
-      const tz = -170 + Math.random() * 360;
+      const tx = BOUNDS.minX + 30 + Math.random() * (BOUNDS.maxX - BOUNDS.minX - 60);
+      const tz = BOUNDS.minZ + 30 + Math.random() * (BOUNDS.maxZ - BOUNDS.minZ - 60);
       if (nearRoad(R, tx, tz, 14)) continue;
 
       let treeOk = true;
@@ -28,6 +28,24 @@ export default function Trees({ obstaclesRef }) {
         if (dd(tx, tz, placed[ii][0], placed[ii][1]) < 10) { treeOk = false; break; }
       }
       if (!treeOk) continue;
+
+      // Exclude roundabout zones
+      let inExclusion = false;
+      for (const j of JUNCTIONS) {
+        if (dd(tx, tz, j.x, j.z) < j.radius + 8) { inExclusion = true; break; }
+      }
+      if (inExclusion) continue;
+
+      // Exclude side-road stub centerlines
+      for (const s of SIDE_ROADS) {
+        const endX = s.x + Math.sin(s.angle) * s.length;
+        const endZ = s.z + Math.cos(s.angle) * s.length;
+        const dx = endX - s.x, dz = endZ - s.z, len2 = dx * dx + dz * dz;
+        const t = len2 > 0 ? Math.max(0, Math.min(1, ((tx - s.x) * dx + (tz - s.z) * dz) / len2)) : 0;
+        const dist = dd(tx, tz, s.x + t * dx, s.z + t * dz);
+        if (dist < 14) { inExclusion = true; break; }
+      }
+      if (inExclusion) continue;
 
       const lsz = 2 + Math.random() * 1.8;
       const leafIdx = Math.floor(Math.random() * 3);
