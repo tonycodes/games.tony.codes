@@ -1,0 +1,16 @@
+services:
+  games-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: dev-games-frontend
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - dev-network
+
+networks:
+  dev-network:
+    external: true
