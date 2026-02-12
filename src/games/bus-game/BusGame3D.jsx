@@ -748,7 +748,8 @@ export default function App(){
       var gx=gndVerts.getX(vi),gy=gndVerts.getY(vi);
       /* don't deform near roads - check actual segments */
       var isNearRoad=false;
-      for(var ri=0;ri<R.length-1;ri++){if(ptSegDist(gx,gy,R[ri][0],R[ri][1],R[ri+1][0],R[ri+1][1])<25){isNearRoad=true;break;}}
+      var gz=-gy; /* local Y maps to world -Z after -PI/2 rotation */
+      for(var ri=0;ri<R.length-1;ri++){if(ptSegDist(gx,gz,R[ri][0],R[ri][1],R[ri+1][0],R[ri+1][1])<25){isNearRoad=true;break;}}
       if(!isNearRoad) gndVerts.setZ(vi,(Math.sin(gx*0.03)*Math.cos(gy*0.03))*0.8);
     }
     gndGeo.computeVertexNormals();
