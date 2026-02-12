@@ -989,134 +989,6 @@ export default function App(){
       scene.add(cg);clouds.push(cg);
     }
 
-    /* ═══════════════════════════════════════
-       TRAFFIC VEHICLES
-       ═══════════════════════════════════════ */
-    var carColors=[0xcc3333,0x3366cc,0x33aa55,0xeeeeee,0x222222,0x888888,0xdd8800,0x6633aa,0x44aaaa,0xaa3366];
-    var carGlassMat=new THREE.MeshStandardMaterial({color:0x88bbdd,roughness:0.1,metalness:0.4,transparent:true,opacity:0.5});
-    var carWhMat=new THREE.MeshStandardMaterial({color:0x1a1a1a,roughness:0.75,metalness:0.1});
-    var carTailMat=new THREE.MeshStandardMaterial({color:0xff2200,emissive:0xff1100,emissiveIntensity:0.4,roughness:0.2});
-    var carHeadMat=new THREE.MeshStandardMaterial({color:0xffffee,emissive:0xffffaa,emissiveIntensity:0.5,roughness:0.1});
-
-    function makeCar(type){
-      var car=new THREE.Group();
-      var col=carColors[Math.floor(Math.random()*carColors.length)];
-      var bodyMat=new THREE.MeshStandardMaterial({color:col,roughness:0.35,metalness:0.2});
-      var darkMat=new THREE.MeshStandardMaterial({color:0x222222,roughness:0.6,metalness:0.2});
-
-      if(type===0){
-        /* sedan */
-        var cm=new THREE.Mesh(new THREE.BoxGeometry(2.0,1.1,4.0),bodyMat);
-        cm.position.set(0,0.85,0);cm.castShadow=true;car.add(cm);
-        /* roof */
-        var cr=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.8,2.2),bodyMat);
-        cr.position.set(0,1.7,0.1);cr.castShadow=true;car.add(cr);
-        /* windshield */
-        var cw=new THREE.Mesh(new THREE.PlaneGeometry(1.6,0.7),carGlassMat);
-        cw.position.set(0,1.5,-0.98);cw.rotation.x=0.15;car.add(cw);
-        /* rear window */
-        var crw=new THREE.Mesh(new THREE.PlaneGeometry(1.5,0.6),carGlassMat);
-        crw.position.set(0,1.5,1.2);crw.rotation.x=-0.2;crw.rotation.y=Math.PI;car.add(crw);
-      } else if(type===1){
-        /* SUV/van */
-        var cm2=new THREE.Mesh(new THREE.BoxGeometry(2.1,1.5,4.5),bodyMat);
-        cm2.position.set(0,1.1,0);cm2.castShadow=true;car.add(cm2);
-        var cr2=new THREE.Mesh(new THREE.BoxGeometry(1.9,0.8,3.0),bodyMat);
-        cr2.position.set(0,2.15,0.2);cr2.castShadow=true;car.add(cr2);
-        var cw2=new THREE.Mesh(new THREE.PlaneGeometry(1.7,0.7),carGlassMat);
-        cw2.position.set(0,1.9,-1.28);cw2.rotation.x=0.1;car.add(cw2);
-      } else {
-        /* small hatchback */
-        var cm3=new THREE.Mesh(new THREE.BoxGeometry(1.7,1.0,3.2),bodyMat);
-        cm3.position.set(0,0.8,0);cm3.castShadow=true;car.add(cm3);
-        var cr3=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.7,1.8),bodyMat);
-        cr3.position.set(0,1.55,0.15);cr3.castShadow=true;car.add(cr3);
-        var cw3=new THREE.Mesh(new THREE.PlaneGeometry(1.3,0.6),carGlassMat);
-        cw3.position.set(0,1.3,-0.73);cw3.rotation.x=0.15;car.add(cw3);
-      }
-      /* bumper */
-      var bmp=new THREE.Mesh(new THREE.BoxGeometry(type===1?2.2:type===0?2.1:1.8,0.2,0.15),darkMat);
-      bmp.position.set(0,0.4,-(type===1?2.26:type===0?2.01:1.61));car.add(bmp);
-      /* headlights */
-      var hlw=type===1?0.8:type===0?0.7:0.6;
-      for(var hs=-1;hs<=1;hs+=2){
-        var hl=new THREE.Mesh(new THREE.SphereGeometry(0.12,6,4),carHeadMat);
-        hl.position.set(hs*hlw,0.6,-(type===1?2.26:type===0?2.01:1.61));car.add(hl);
-      }
-      /* tail lights */
-      for(var ts=-1;ts<=1;ts+=2){
-        var tl=new THREE.Mesh(new THREE.BoxGeometry(0.25,0.15,0.06),carTailMat);
-        tl.position.set(ts*hlw,0.6,(type===1?2.26:type===0?2.01:1.61));car.add(tl);
-      }
-      /* wheels */
-      var wz=type===1?1.5:type===0?1.3:1.0;
-      var wr2=type===1?0.4:0.35;
-      for(var wside=-1;wside<=1;wside+=2)for(var wend=-1;wend<=1;wend+=2){
-        var wh=new THREE.Mesh(new THREE.CylinderGeometry(wr2,wr2,0.2,8),carWhMat);
-        wh.rotation.z=Math.PI/2;wh.position.set(wside*(type===1?1.1:type===0?1.05:0.9),wr2,wend*wz);
-        wh.castShadow=true;car.add(wh);
-      }
-      return car;
-    }
-
-    /* spawn traffic - each follows route waypoints */
-    var traffic=[];
-    var NUM_TRAFFIC=12;
-    for(i=0;i<NUM_TRAFFIC;i++){
-      var carType=Math.floor(Math.random()*3);
-      var carMesh=makeCar(carType);
-      scene.add(carMesh);
-
-      /* pick random start segment */
-      var seg=Math.floor(Math.random()*(R.length-1));
-      var segT=Math.random();
-      /* direction: 0=forward along route, 1=reverse */
-      var dir=Math.random()>0.5?1:-1;
-      /* UK left-hand driving: offset from road center based on travel direction
-         Forward (dir=1) drives on LEFT of segment A→B direction
-         Reverse (dir=-1) drives on LEFT of B→A = RIGHT of A→B */
-      var laneOff=3.5;
-      /* speed varies by vehicle type */
-      var baseSpd=6+Math.random()*8;
-      if(carType===1)baseSpd*=0.85; /* vans slower */
-      if(carType===2)baseSpd*=1.1; /* hatchbacks quicker */
-
-      traffic.push({
-        mesh:carMesh, seg:seg, segT:segT, dir:dir,
-        laneOff:laneOff, speed:baseSpd, baseSpeed:baseSpd,
-        type:carType, waiting:0, laneShift:0,
-        halfLen:carType===1?2.3:carType===0?2.0:1.6,
-        halfWid:carType===1?1.1:carType===0?1.05:0.9
-      });
-    }
-
-    /* position a traffic car on its segment */
-    function positionTraffic(tv){
-      var s=tv.seg;
-      if(s<0)s=0;if(s>=R.length-1)s=R.length-2;
-      var ax=R[s][0],az=R[s][1],bx=R[s+1][0],bz=R[s+1][1];
-      var dx2=bx-ax,dz2=bz-az;
-      var posX=ax+dx2*tv.segT;
-      var posZ=az+dz2*tv.segT;
-      /* segment direction angle (A→B) - never flipped */
-      var segAng=Math.atan2(dx2,dz2);
-      /* car facing: flip for reverse */
-      var carAng=tv.dir===1?segAng:segAng+Math.PI;
-      /* UK left-hand driving: use segment perpendicular consistently
-         perpendicular LEFT of A→B = (cos(segAng), -sin(segAng))
-         Forward (dir=1) → offset LEFT of A→B (side=+1)
-         Reverse (dir=-1) → offset RIGHT of A→B (side=-1) */
-      var side=tv.dir;
-      var effOff=tv.laneOff-(tv.laneShift||0);
-      posX+=Math.cos(segAng)*side*effOff;
-      posZ+=-Math.sin(segAng)*side*effOff;
-      tv.mesh.position.set(posX,0,posZ);
-      tv.mesh.rotation.y=carAng;
-      tv.wx=posX;tv.wz=posZ;tv.ang=carAng;
-    }
-
-    /* initial positioning */
-    for(i=0;i<traffic.length;i++)positionTraffic(traffic[i]);
 
     /* ═══════════════════════════════════════
        BUS (enhanced detail)
@@ -1209,14 +1081,6 @@ export default function App(){
       for(var ssi=0;ssi<STOPS.length;ssi++){var wwc=0;
         for(var ppi=0;ppi<g.pax.length;ppi++)if(g.pax[ppi].origin===ssi&&!g.pax[ppi].on&&!g.pax[ppi].done)wwc++;
         for(var ffi=0;ffi<waitFigs[ssi].length;ffi++)waitFigs[ssi][ffi].visible=ffi<wwc;}
-      /* reset traffic positions */
-      for(var tri=0;tri<traffic.length;tri++){
-        traffic[tri].seg=Math.floor(Math.random()*(R.length-1));
-        traffic[tri].segT=Math.random();
-        traffic[tri].speed=traffic[tri].baseSpeed;
-        traffic[tri].waiting=0;traffic[tri].laneShift=0;
-        positionTraffic(traffic[tri]);
-      }
     };
 
     g.door=function(){
@@ -1364,123 +1228,6 @@ export default function App(){
         stopRings[ri2].material.emissiveIntensity=0.3+Math.sin(pt2+ri2*0.9)*0.2;
       }
 
-      /* ── UPDATE TRAFFIC ── */
-      for(var ti=0;ti<traffic.length;ti++){
-        var tv=traffic[ti];
-        /* advance along route */
-        var tSeg=tv.seg;
-        var tsx=R[tSeg][0],tsz=R[tSeg][1];
-        var tex=R[tSeg+1][0],tez=R[tSeg+1][1];
-        var segLen=dd(tsx,tsz,tex,tez);
-        if(segLen<0.1)segLen=0.1;
-
-        /* slow down if near another car ahead in same lane */
-        var curSpd=tv.baseSpeed;
-        var fwdX=-Math.sin(tv.ang),fwdZ=-Math.cos(tv.ang);
-        for(var tj=0;tj<traffic.length;tj++){
-          if(ti===tj)continue;
-          var ot=traffic[tj];
-          var dToOther=dd(tv.wx,tv.wz,ot.wx,ot.wz);
-          if(dToOther<14){
-            var toOtherX=ot.wx-tv.wx,toOtherZ=ot.wz-tv.wz;
-            var dot=toOtherX*fwdX+toOtherZ*fwdZ;
-            if(dot>0){
-              var latOther=Math.abs(toOtherX*fwdZ-toOtherZ*fwdX);
-              if(latOther<4){
-                if(dToOther<6)curSpd=Math.min(curSpd,0);
-                else curSpd=Math.min(curSpd,Math.max((dToOther-5)*2,0));
-              }
-            }
-          }
-        }
-        /* bus awareness: stop, slow, or overtake */
-        var dToBus=dd(tv.wx,tv.wz,bus.position.x,bus.position.z);
-        var busAhead=false;
-        if(dToBus<22){
-          var toBusX=bus.position.x-tv.wx,toBusZ=bus.position.z-tv.wz;
-          var dot2=toBusX*fwdX+toBusZ*fwdZ;
-          if(dot2>0){
-            var latBus=Math.abs(toBusX*fwdZ-toBusZ*fwdX);
-            if(latBus<4.5){
-              busAhead=true;
-              if(dToBus<8){curSpd=0;tv.waiting+=dt;}
-              else if(dToBus<16){curSpd=Math.min(curSpd,Math.max((dToBus-7)*2,0));}
-            }
-          }
-        }
-        if(!busAhead)tv.waiting=Math.max(tv.waiting-dt*2,0);
-        /* overtake after waiting 2s */
-        var wantShift=tv.waiting>2.0?7:0;
-        tv.laneShift+=(wantShift-tv.laneShift)*dt*2;
-        if(Math.abs(tv.laneShift)<0.1)tv.laneShift=0;
-        if(tv.laneShift>3)curSpd=Math.max(curSpd,tv.baseSpeed*0.6);
-        tv.speed=tv.speed+(curSpd-tv.speed)*dt*3;
-
-        /* move along segment */
-        var advance=tv.speed*dt/segLen;
-        if(tv.dir===1){
-          tv.segT+=advance;
-          while(tv.segT>=1){
-            tv.segT-=1;
-            tv.seg++;
-            if(tv.seg>=R.length-1){tv.seg=0;tv.segT=0;}
-            tSeg=tv.seg;
-            segLen=dd(R[tSeg][0],R[tSeg][1],R[tSeg+1][0],R[tSeg+1][1]);
-            if(segLen<0.1)segLen=0.1;
-          }
-        }else{
-          tv.segT-=advance;
-          while(tv.segT<0){
-            tv.segT+=1;
-            tv.seg--;
-            if(tv.seg<0){tv.seg=R.length-2;tv.segT=1;}
-            tSeg=tv.seg;
-            segLen=dd(R[tSeg][0],R[tSeg][1],R[tSeg+1][0],R[tSeg+1][1]);
-            if(segLen<0.1)segLen=0.1;
-          }
-        }
-        positionTraffic(tv);
-      }
-
-      /* ── BUS vs TRAFFIC collision ── */
-      if(stateRef.current==="playing"&&!g.crashed){
-        for(var ti2=0;ti2<traffic.length;ti2++){
-          var tv2=traffic[ti2];
-          var dx3=bus.position.x-tv2.wx;
-          var dz3=bus.position.z-tv2.wz;
-          var distBT=Math.sqrt(dx3*dx3+dz3*dz3);
-          /* rough sphere check first */
-          if(distBT<8){
-            /* oriented box check: project bus center into car's local space */
-            var cAng=tv2.ang;
-            var cSin=Math.sin(cAng),cCos=Math.cos(cAng);
-            /* bus corners in world */
-            var bSin=Math.sin(g.heading),bCos=Math.cos(g.heading);
-            var busHits=false;
-            for(var bc=-1;bc<=1;bc+=2)for(var bl=-1;bl<=1;bl+=2){
-              var bpx=bus.position.x-bSin*4.0*bl+bCos*1.7*bc;
-              var bpz=bus.position.z-bCos*4.0*bl-bSin*1.7*bc;
-              /* transform into car local space */
-              var lx=(bpx-tv2.wx)*cCos+(bpz-tv2.wz)*cSin;
-              var lz=-(bpx-tv2.wx)*cSin+(bpz-tv2.wz)*cCos;
-              if(Math.abs(lx)<tv2.halfWid+0.3&&Math.abs(lz)<tv2.halfLen+0.3){busHits=true;break;}
-            }
-            if(busHits){
-              var impSpd=Math.abs(g.speed);
-              bus.position.x=g.prevX;bus.position.z=g.prevZ;
-              g.speed=0;g.crashed=true;g.crashTimer=2.5;
-              g.camShake=Math.min(impSpd/15,1.0);
-              g.score=Math.max(g.score-Math.round(impSpd*3),0);
-              g.damage++;
-              if(audioRef.current)audioRef.current.playCrash(Math.min(impSpd/30,1));
-              /* push the traffic car away slightly */
-              tv2.speed=-2;tv2.segT+=tv2.dir*0.15;
-              break;
-            }
-          }
-        }
-      }
-
       /* clouds */
       for(var ci3=0;ci3<clouds.length;ci3++){clouds[ci3].position.x+=dt*(0.5+ci3*0.05);if(clouds[ci3].position.x>450)clouds[ci3].position.x=-350;}
 
@@ -1562,7 +1309,7 @@ export default function App(){
               <div><span style={{color:"#ff8c00",display:"inline-block",width:75}}>SPACE</span> Doors at stops</div>
               <div><span style={{color:"#ff8c00",display:"inline-block",width:75}}>H</span> Horn</div>
               <div style={{marginTop:10,color:"#888",fontSize:11,lineHeight:"1.6em"}}>
-                Follow blue arrows. Stop at green rings to pick up passengers. 100 pts per delivery. Watch for traffic!
+                Follow blue arrows. Stop at green rings to pick up passengers. 100 pts per delivery.
               </div>
               <div style={{marginTop:6,color:"#6a8",fontSize:11}}>🔊 Engine sounds, music &amp; SFX included</div>
             </div>
