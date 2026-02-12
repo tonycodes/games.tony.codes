@@ -1084,7 +1084,7 @@ export default function App(){
       traffic.push({
         mesh:carMesh, seg:seg, segT:segT, dir:dir,
         laneOff:laneOff, speed:baseSpd, baseSpeed:baseSpd,
-        type:carType, waiting:0,
+        type:carType, waiting:0, laneShift:0,
         halfLen:carType===1?2.3:carType===0?2.0:1.6,
         halfWid:carType===1?1.1:carType===0?1.05:0.9
       });
@@ -1107,8 +1107,9 @@ export default function App(){
          Forward (dir=1) → offset LEFT of A→B (side=+1)
          Reverse (dir=-1) → offset RIGHT of A→B (side=-1) */
       var side=tv.dir;
-      posX+=Math.cos(segAng)*side*tv.laneOff;
-      posZ+=-Math.sin(segAng)*side*tv.laneOff;
+      var effOff=tv.laneOff-(tv.laneShift||0);
+      posX+=Math.cos(segAng)*side*effOff;
+      posZ+=-Math.sin(segAng)*side*effOff;
       tv.mesh.position.set(posX,0,posZ);
       tv.mesh.rotation.y=carAng;
       tv.wx=posX;tv.wz=posZ;tv.ang=carAng;
@@ -1213,6 +1214,7 @@ export default function App(){
         traffic[tri].seg=Math.floor(Math.random()*(R.length-1));
         traffic[tri].segT=Math.random();
         traffic[tri].speed=traffic[tri].baseSpeed;
+        traffic[tri].waiting=0;traffic[tri].laneShift=0;
         positionTraffic(traffic[tri]);
       }
     };
@@ -1372,32 +1374,46 @@ export default function App(){
         var segLen=dd(tsx,tsz,tex,tez);
         if(segLen<0.1)segLen=0.1;
 
-        /* slow down if near another car ahead */
+        /* slow down if near another car ahead in same lane */
         var curSpd=tv.baseSpeed;
+        var fwdX=-Math.sin(tv.ang),fwdZ=-Math.cos(tv.ang);
         for(var tj=0;tj<traffic.length;tj++){
           if(ti===tj)continue;
           var ot=traffic[tj];
           var dToOther=dd(tv.wx,tv.wz,ot.wx,ot.wz);
-          if(dToOther<12){
-            /* check if other is ahead (dot product with heading) */
+          if(dToOther<14){
             var toOtherX=ot.wx-tv.wx,toOtherZ=ot.wz-tv.wz;
-            var fwdX=-Math.sin(tv.ang),fwdZ=-Math.cos(tv.ang);
             var dot=toOtherX*fwdX+toOtherZ*fwdZ;
-            if(dot>0&&dToOther<10){
-              curSpd=Math.min(curSpd,Math.max(dToOther*0.8,1));
+            if(dot>0){
+              var latOther=Math.abs(toOtherX*fwdZ-toOtherZ*fwdX);
+              if(latOther<4){
+                if(dToOther<6)curSpd=Math.min(curSpd,0);
+                else curSpd=Math.min(curSpd,Math.max((dToOther-5)*2,0));
+              }
             }
           }
         }
-        /* also slow if near bus */
+        /* bus awareness: stop, slow, or overtake */
         var dToBus=dd(tv.wx,tv.wz,bus.position.x,bus.position.z);
-        if(dToBus<14){
+        var busAhead=false;
+        if(dToBus<22){
           var toBusX=bus.position.x-tv.wx,toBusZ=bus.position.z-tv.wz;
-          var fwdX2=-Math.sin(tv.ang),fwdZ2=-Math.cos(tv.ang);
-          var dot2=toBusX*fwdX2+toBusZ*fwdZ2;
-          if(dot2>0&&dToBus<12){
-            curSpd=Math.min(curSpd,Math.max(dToBus*0.6,0.5));
+          var dot2=toBusX*fwdX+toBusZ*fwdZ;
+          if(dot2>0){
+            var latBus=Math.abs(toBusX*fwdZ-toBusZ*fwdX);
+            if(latBus<4.5){
+              busAhead=true;
+              if(dToBus<8){curSpd=0;tv.waiting+=dt;}
+              else if(dToBus<16){curSpd=Math.min(curSpd,Math.max((dToBus-7)*2,0));}
+            }
           }
         }
+        if(!busAhead)tv.waiting=Math.max(tv.waiting-dt*2,0);
+        /* overtake after waiting 2s */
+        var wantShift=tv.waiting>2.0?7:0;
+        tv.laneShift+=(wantShift-tv.laneShift)*dt*2;
+        if(Math.abs(tv.laneShift)<0.1)tv.laneShift=0;
+        if(tv.laneShift>3)curSpd=Math.max(curSpd,tv.baseSpeed*0.6);
         tv.speed=tv.speed+(curSpd-tv.speed)*dt*3;
 
         /* move along segment */
