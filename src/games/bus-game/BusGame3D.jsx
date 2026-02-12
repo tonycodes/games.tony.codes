@@ -1003,7 +1003,9 @@ export default function App(){
         var adx=(dx1+dx2)/2,adz=(dz1+dz2)/2,all=Math.sqrt(adx*adx+adz*adz);
         if(all>0.01){nx=-adz/all;nz2=adx/all;}
       }else if(stop.i<R.length-1){var nxt2=R[stop.i+1],ddx=nxt2[0]-wp[0],ddz=nxt2[1]-wp[1],ll=Math.sqrt(ddx*ddx+ddz*ddz);
-        if(ll>0.01){nx=-ddz/ll;nz2=ddx/ll;}}
+        if(ll>0.01){nx=-ddz/ll;nz2=ddx/ll;}
+      }else if(stop.i>0){var prev2=R[stop.i-1],ddx2=wp[0]-prev2[0],ddz2=wp[1]-prev2[1],ll3=Math.sqrt(ddx2*ddx2+ddz2*ddz2);
+        if(ll3>0.01){nx=-ddz2/ll3;nz2=ddx2/ll3;}}
       var sx=wp[0]+nx*12,sz=wp[1]+nz2*12;
       stopPositions.push({sx:sx,sz:sz,nx:nx,nz:nz2});
       /* shelter */
