@@ -665,10 +665,12 @@ export default function App(){
   var stateRef=useRef("menu");
   var audioRef=useRef(null);
   var [ui,setUi]=useState({phase:"menu",spd:0,score:0,onBus:0,del:0,tot:0,
-    near:null,stopN:"",nextS:STOPS[0].n,prog:0,time:0,bOn:0,bOff:0,crashed:false,damage:0});
+    near:null,stopN:"",nextS:STOPS[0].n,prog:0,time:0,bOn:0,bOff:0,crashed:false,damage:0,mathPrev:0,mathSolved:true});
   var keysRef=useRef({});
   var gRef=useRef(null);
   var [muted,setMuted]=useState(false);
+  var [mathInput,setMathInput]=useState("");
+  var [mathWrong,setMathWrong]=useState(false);
 
   /* init audio on first interaction */
   function ensureAudio(){
@@ -1091,7 +1093,8 @@ export default function App(){
       speed:0,heading:initAng,steer:0,pax:newPax(),onBus:0,delivered:0,score:0,
       nearIdx:-1,stoppedIdx:-1,time:0,nextWp:1,visited:{},
       crashed:false,crashTimer:0,damage:0,camShake:0,
-      prevX:R[0][0],prevZ:R[0][1],obstacles:obstacles
+      prevX:R[0][0],prevZ:R[0][1],obstacles:obstacles,
+      mathSolved:true,mathPrev:0
     };
     gRef.current=g;
 
@@ -1106,6 +1109,7 @@ export default function App(){
       g.pax=newPax();g.speed=0;g.steer=0;g.onBus=0;g.delivered=0;g.score=0;
       g.nearIdx=-1;g.stoppedIdx=-1;g.time=0;g.nextWp=1;g.visited={};
       g.crashed=false;g.crashTimer=0;g.damage=0;g.camShake=0;
+      g.mathSolved=true;g.mathPrev=0;
       g.prevX=R[0][0];g.prevZ=R[0][1];g.heading=initAng;
       bus.position.set(R[0][0],0,R[0][1]);bus.rotation.y=initAng;bus.rotation.z=0;bus.rotation.x=0;
       for(var ai=alightFigs.length-1;ai>=0;ai--)recycleAlightFig(alightFigs[ai]);
@@ -1121,6 +1125,7 @@ export default function App(){
       if(st==="playing"&&g.nearIdx>=0&&Math.abs(g.speed)<2){
         g.speed=0;g.stoppedIdx=g.nearIdx;g.visited[g.nearIdx]=true;
         var ssi=g.nearIdx,bOff=0,bOn=0;
+        var previousOnBus=g.onBus;
         if(audioRef.current)audioRef.current.playDoor();
         var sp=stopPositions[ssi];
         var doorX=bus.position.x+sp.nx*2,doorZ=bus.position.z+sp.nz*2;
@@ -1144,6 +1149,9 @@ export default function App(){
                 wf.userData.walkEndX=doorX;wf.userData.walkEndZ=doorZ;
                 wf.userData.walkSpeed=5;wf.userData.paxIndex=ppi2;break;}}}}
         if(bOn>0&&audioRef.current)audioRef.current.playBell();
+        g.mathPrev=previousOnBus;
+        g.mathSolved=(bOn===0&&bOff===0);
+        setMathInput("");setMathWrong(false);
         if(ssi===STOPS.length-1){
           /* terminal: finish animations instantly */
           for(var ai3=alightFigs.length-1;ai3>=0;ai3--){
@@ -1158,13 +1166,15 @@ export default function App(){
           var rem=0;for(var ppi4=0;ppi4<g.pax.length;ppi4++)if(g.pax[ppi4].on&&!g.pax[ppi4].done)rem++;
           g.score-=rem*50;g.onBus=0;stateRef.current="complete";
           setUi({phase:"complete",spd:0,score:g.score,onBus:0,del:g.delivered,tot:g.pax.length,
-            near:null,stopN:"",nextS:"",prog:1,time:g.time,bOn:bOn,bOff:bOff,crashed:false,damage:g.damage});return;}
+            near:null,stopN:"",nextS:"",prog:1,time:g.time,bOn:bOn,bOff:bOff,crashed:false,damage:g.damage,mathPrev:0,mathSolved:true});return;}
         var cnt2=0;for(var ppi5=0;ppi5<g.pax.length;ppi5++)if(g.pax[ppi5].on)cnt2++;
         g.onBus=cnt2;
         stateRef.current="stopped";
         setUi(function(prev){return{phase:"stopped",spd:0,score:g.score,onBus:g.onBus,del:g.delivered,
-          tot:g.pax.length,near:null,stopN:STOPS[ssi].n,nextS:prev.nextS,prog:prev.prog,time:g.time,bOn:bOn,bOff:bOff,crashed:false,damage:g.damage};});
+          tot:g.pax.length,near:null,stopN:STOPS[ssi].n,nextS:prev.nextS,prog:prev.prog,time:g.time,bOn:bOn,bOff:bOff,crashed:false,damage:g.damage,
+          mathPrev:previousOnBus,mathSolved:(bOn===0&&bOff===0)};});
       }else if(st==="stopped"){
+        if(!g.mathSolved)return;
         if(audioRef.current)audioRef.current.playDoor();
         /* finish any remaining walk animations instantly */
         var ssi2=g.stoppedIdx;
@@ -1285,7 +1295,7 @@ export default function App(){
 
         setUi({phase:"playing",spd:Math.abs(g.speed),score:g.score,onBus:g.onBus,del:g.delivered,
           tot:g.pax.length,near:g.nearIdx>=0?STOPS[g.nearIdx].n:null,stopN:"",nextS:nsn,
-          prog:g.nextWp/(R.length-1),time:g.time,bOn:0,bOff:0,crashed:g.crashed,damage:g.damage});
+          prog:g.nextWp/(R.length-1),time:g.time,bOn:0,bOff:0,crashed:g.crashed,damage:g.damage,mathPrev:g.mathPrev,mathSolved:g.mathSolved});
       }
 
       /* update wait figs and walk animations */
@@ -1372,6 +1382,21 @@ export default function App(){
     if(audioRef.current){var m2=!audioRef.current.getMuted();audioRef.current.setMute(m2);setMuted(m2);}
   },[]);
 
+  function checkMath(){
+    var g2=gRef.current;if(!g2)return;
+    var answer=parseInt(mathInput,10);
+    var correct=ui.mathPrev-ui.bOff+ui.bOn;
+    if(answer===correct){
+      g2.mathSolved=true;
+      if(audioRef.current)audioRef.current.playBell();
+      setUi(function(prev){return Object.assign({},prev,{mathSolved:true});});
+      setMathInput("");setMathWrong(false);
+    }else{
+      setMathWrong(true);
+      setTimeout(function(){setMathWrong(false);},600);
+    }
+  }
+
   var tS=function(k){keysRef.current[k]=true;};
   var tE=function(k){keysRef.current[k]=false;};
   var phase=ui.phase;
@@ -1383,6 +1408,7 @@ export default function App(){
 
   return(
     <div style={{width:"100%",height:"100vh",background:"#000",position:"relative",overflow:"hidden",fontFamily:"'Courier New',monospace"}}>
+      <style>{`@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}50%{transform:translateX(6px)}75%{transform:translateX(-4px)}}`}</style>
       <div ref={canvasRef} style={{width:"100%",height:"100%",position:"absolute",top:0,left:0,
         filter:phase==="menu"?"blur(3px) brightness(0.35)":phase==="complete"?"blur(4px) brightness(0.3)":"none",
         transition:"filter 0.5s"}} />
@@ -1479,7 +1505,7 @@ export default function App(){
               <div style={{color:"#e8b400",fontSize:19,fontWeight:"bold"}}>{ui.score}</div>
               <div style={{color:"#555",fontSize:9,letterSpacing:2}}>SCORE</div>
               <div style={{display:"flex",justifyContent:"flex-end",gap:12,marginTop:6}}>
-                <div><div style={{color:"#f39c12",fontSize:14,fontWeight:"bold"}}>{ui.onBus}</div><div style={{color:"#555",fontSize:8}}>ON BUS</div></div>
+                <div><div style={{color:"#f39c12",fontSize:18,fontWeight:"bold"}}>🚌 {ui.onBus}</div><div style={{color:"#777",fontSize:9}}>ON BUS</div></div>
                 <div><div style={{color:"#2ecc71",fontSize:14,fontWeight:"bold"}}>{ui.del}</div><div style={{color:"#555",fontSize:8}}>DONE</div></div>
               </div>
               <div style={{color:"#333",fontSize:9,marginTop:5}}>{Math.floor(ui.time)}s</div>
@@ -1513,15 +1539,50 @@ export default function App(){
 
           {phase==="stopped"&&(
             <div style={{position:"absolute",bottom:75,left:"50%",transform:"translateX(-50%)",
-              background:"rgba(0,0,0,0.85)",borderRadius:13,padding:"16px 30px",border:"2px solid #2ecc71",
-              textAlign:"center",minWidth:240,backdropFilter:"blur(8px)"}}>
-              <div style={{color:"#2ecc71",fontSize:15,fontWeight:"bold",marginBottom:7}}>🚏 {ui.stopN}</div>
-              <div style={{display:"flex",justifyContent:"center",gap:24,marginBottom:8}}>
-                {ui.bOff>0&&<div><div style={{color:"#e74c3c",fontSize:17,fontWeight:"bold"}}>↓ {ui.bOff}</div><div style={{color:"#777",fontSize:9}}>ALIGHTING</div></div>}
-                {ui.bOn>0&&<div><div style={{color:"#2ecc71",fontSize:17,fontWeight:"bold"}}>↑ {ui.bOn}</div><div style={{color:"#777",fontSize:9}}>BOARDING</div></div>}
-                {ui.bOff===0&&ui.bOn===0&&<div style={{color:"#777",fontSize:11}}>No passengers here</div>}
-              </div>
-              <div style={{color:"#e8b400",fontSize:10}}>Press SPACE to close doors &amp; continue</div>
+              background:"rgba(0,0,0,0.9)",borderRadius:13,padding:"18px 30px",
+              border:ui.mathSolved?"2px solid #2ecc71":"2px solid #e8b400",
+              textAlign:"center",minWidth:260,backdropFilter:"blur(8px)",pointerEvents:"auto"}}>
+              <div style={{color:"#2ecc71",fontSize:15,fontWeight:"bold",marginBottom:10}}>🚏 {ui.stopN}</div>
+              {ui.bOff===0&&ui.bOn===0?(
+                <div>
+                  <div style={{color:"#777",fontSize:12,marginBottom:8}}>No passengers here</div>
+                  <div style={{color:"#e8b400",fontSize:11}}>Press SPACE to close doors</div>
+                </div>
+              ):!ui.mathSolved?(
+                <div>
+                  <div style={{color:"#aac",fontSize:13,marginBottom:6}}>🚌 You had <span style={{color:"#f39c12",fontWeight:"bold",fontSize:16}}>{ui.mathPrev}</span> on the bus</div>
+                  <div style={{display:"flex",justifyContent:"center",gap:20,marginBottom:10}}>
+                    {ui.bOff>0&&<div style={{color:"#e74c3c",fontSize:15,fontWeight:"bold"}}>⬇ {ui.bOff} got off</div>}
+                    {ui.bOn>0&&<div style={{color:"#2ecc71",fontSize:15,fontWeight:"bold"}}>⬆ {ui.bOn} got on</div>}
+                  </div>
+                  <div style={{color:"#e8b400",fontSize:14,fontWeight:"bold",marginBottom:8}}>How many are on the bus now?</div>
+                  <div style={{display:"flex",justifyContent:"center",gap:8,alignItems:"center"}}>
+                    <input type="number" inputMode="numeric" pattern="[0-9]*" value={mathInput}
+                      onChange={function(e){setMathInput(e.target.value);}}
+                      onKeyDown={function(e){e.stopPropagation();if(e.key==="Enter")checkMath();}}
+                      autoFocus
+                      style={{width:64,padding:"8px 10px",fontSize:20,fontWeight:"bold",textAlign:"center",
+                        borderRadius:8,border:mathWrong?"2px solid #e74c3c":"2px solid #e8b400",
+                        background:"rgba(255,255,255,0.1)",color:"#fff",outline:"none",
+                        fontFamily:"'Courier New',monospace",
+                        animation:mathWrong?"shake 0.4s ease":"none"}} />
+                    <button onClick={checkMath} style={{padding:"8px 16px",fontSize:14,fontWeight:"bold",
+                      borderRadius:8,border:"none",cursor:"pointer",
+                      background:"linear-gradient(135deg,#e8b400,#ff6b00)",color:"#111",
+                      fontFamily:"'Courier New',monospace"}}>Check</button>
+                  </div>
+                  {mathWrong&&<div style={{color:"#e74c3c",fontSize:12,marginTop:6}}>Not quite! Try again</div>}
+                </div>
+              ):(
+                <div>
+                  <div style={{display:"flex",justifyContent:"center",gap:20,marginBottom:6}}>
+                    {ui.bOff>0&&<div style={{color:"#e74c3c",fontSize:15,fontWeight:"bold"}}>⬇ {ui.bOff} got off</div>}
+                    {ui.bOn>0&&<div style={{color:"#2ecc71",fontSize:15,fontWeight:"bold"}}>⬆ {ui.bOn} got on</div>}
+                  </div>
+                  <div style={{color:"#2ecc71",fontSize:16,fontWeight:"bold",marginBottom:6}}>Correct! {ui.mathPrev-ui.bOff+ui.bOn} passengers on the bus</div>
+                  <div style={{color:"#e8b400",fontSize:11}}>Press SPACE to close doors &amp; continue</div>
+                </div>
+              )}
             </div>
           )}
 
