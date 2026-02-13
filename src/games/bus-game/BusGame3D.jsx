@@ -451,6 +451,44 @@ function generateSmoothRoad(waypoints){
   return result;
 }
 var smoothR=generateSmoothRoad(R);
+
+/* ── ROLLING HILLS: pre-compute distances + height along spline ── */
+var smoothDists=[0];
+for(var sd=1;sd<smoothR.length;sd++){
+  var sdx=smoothR[sd][0]-smoothR[sd-1][0],sdz=smoothR[sd][1]-smoothR[sd-1][1];
+  smoothDists.push(smoothDists[sd-1]+Math.sqrt(sdx*sdx+sdz*sdz));
+}
+var smoothTotal=smoothDists[smoothDists.length-1]||1;
+/* cumulative distance at each raw waypoint */
+var wpDists=[0];
+for(var wd=1;wd<R.length;wd++){
+  var wdx=R[wd][0]-R[wd-1][0],wdz=R[wd][1]-R[wd-1][1];
+  wpDists.push(wpDists[wd-1]+Math.sqrt(wdx*wdx+wdz*wdz));
+}
+function getRouteHeight(dist){
+  if(smoothTotal<=0)return 0;
+  var t=dist/smoothTotal;
+  var fade=Math.min(t*5,1)*Math.min((1-t)*5,1);
+  return Math.sin(t*Math.PI*2*2.5)*3.0*fade;
+}
+var roadHeights=[];
+for(var rh=0;rh<smoothR.length;rh++)roadHeights.push(getRouteHeight(smoothDists[rh]));
+/* find nearest smoothR point → {y, pitch} — amortized O(1) via lastNearIdx */
+var lastNearIdx=0;
+function getBusHeight(bx,bz){
+  var best=1e9,bestI=lastNearIdx,lo=Math.max(lastNearIdx-30,0),hi=Math.min(lastNearIdx+30,smoothR.length-1);
+  for(var bi2=lo;bi2<=hi;bi2++){var dx2=bx-smoothR[bi2][0],dz2=bz-smoothR[bi2][1],d2=dx2*dx2+dz2*dz2;if(d2<best){best=d2;bestI=bi2;}}
+  /* fallback: full scan if nothing close found */
+  if(best>400){for(var bi3=0;bi3<smoothR.length;bi3++){var dx3=bx-smoothR[bi3][0],dz3=bz-smoothR[bi3][1],d3=dx3*dx3+dz3*dz3;if(d3<best){best=d3;bestI=bi3;}}}
+  lastNearIdx=bestI;
+  var i0=Math.max(bestI-2,0),i1=Math.min(bestI+2,smoothR.length-1);
+  var dy=roadHeights[i1]-roadHeights[i0];
+  var ddd=smoothDists[i1]-smoothDists[i0];
+  var slope=ddd>0.01?dy/ddd:0;
+  var pitch=-Math.atan(slope)*0.5;
+  return{y:roadHeights[bestI],pitch:pitch};
+}
+
 /* difficulty: "easy"=ages 4-5 (add only, 1-2 per stop), "medium"=ages 6-7 (add/sub, 1-3), "hard"=ages 8+ (bigger, 2-4) */
 function newPax(difficulty){
   var p=[];var maxPerStop=difficulty==="easy"?2:difficulty==="medium"?3:4;
@@ -557,17 +595,24 @@ export default function App(){
     var hemi=new THREE.HemisphereLight(0x8ec4e8,0x4a7a3a,0.35);
     scene.add(hemi);
 
-    /* ── GROUND with subtle texture ── */
+    /* ── GROUND with terrain that blends into rolling hills ── */
     var gndGeo=new THREE.PlaneGeometry(800,800,80,80);
-    /* add subtle height variation */
     var gndVerts=gndGeo.attributes.position;
     for(var vi=0;vi<gndVerts.count;vi++){
       var gx=gndVerts.getX(vi),gy=gndVerts.getY(vi);
-      /* don't deform near roads - check actual segments */
-      var isNearRoad=false;
       var gz=-gy; /* local Y maps to world -Z after -PI/2 rotation */
-      for(var ri=0;ri<R.length-1;ri++){if(ptSegDist(gx,gz,R[ri][0],R[ri][1],R[ri+1][0],R[ri+1][1])<25){isNearRoad=true;break;}}
-      if(!isNearRoad) gndVerts.setZ(vi,(Math.sin(gx*0.03)*Math.cos(gy*0.03))*0.8);
+      /* find nearest smoothR point */
+      var gBest=1e9,gBestI=0;
+      for(var gi=0;gi<smoothR.length;gi++){var gdx=gx-smoothR[gi][0],gdz=gz-smoothR[gi][1],gd2=gdx*gdx+gdz*gdz;if(gd2<gBest){gBest=gd2;gBestI=gi;}}
+      var roadDist=Math.sqrt(gBest);
+      var h;
+      if(roadDist<25){
+        var blend=1-roadDist/25;
+        h=roadHeights[gBestI]*blend;
+      }else{
+        h=(Math.sin(gx*0.03)*Math.cos(gy*0.03))*0.8+roadHeights[gBestI]*0.3*Math.exp(-roadDist/80);
+      }
+      gndVerts.setZ(vi,h);
     }
     gndGeo.computeVertexNormals();
     var gndMat=new THREE.MeshStandardMaterial({color:0x4a8a4a,roughness:0.95,metalness:0});
@@ -584,7 +629,7 @@ export default function App(){
     var roadGeos=[],swalkGeos=[],curbGeos=[],dashGeos=[],edgeGeos=[],arrowGeos=[];
 
     /* build continuous ribbon geometry along spline — no seams at curves */
-    function buildRibbon(pts,off,hw,y){
+    function buildRibbon(pts,off,hw,yBase,heights){
       var pos=[],idx=[],n=pts.length;
       for(var ri2=0;ri2<n;ri2++){
         var tx,tz;
@@ -595,25 +640,26 @@ export default function App(){
         if(tl>0.001){tx/=tl;tz/=tl;}
         var px=-tz,pz=tx;
         var cx2=pts[ri2][0]+px*off,cz2=pts[ri2][1]+pz*off;
-        pos.push(cx2+px*hw,y,cz2+pz*hw, cx2-px*hw,y,cz2-pz*hw);
+        var vy=yBase+(heights?heights[ri2]:0);
+        pos.push(cx2+px*hw,vy,cz2+pz*hw, cx2-px*hw,vy,cz2-pz*hw);
         if(ri2>0){var v=(ri2-1)*2;idx.push(v,v+2,v+1,v+1,v+2,v+3);}
       }
       var geo=new THREE.BufferGeometry();
       geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
       geo.setIndex(idx);geo.computeVertexNormals();return geo;
     }
-    roadGeos.push(buildRibbon(smoothR,0,7,0.15));
+    roadGeos.push(buildRibbon(smoothR,0,7,0.15,roadHeights));
     for(s=-1;s<=1;s+=2){
-      swalkGeos.push(buildRibbon(smoothR,s*8.5,1.25,0.28));
-      curbGeos.push(buildRibbon(smoothR,s*7.2,0.15,0.25));
-      edgeGeos.push(buildRibbon(smoothR,s*6,0.1,0.16));
+      swalkGeos.push(buildRibbon(smoothR,s*8.5,1.25,0.28,roadHeights));
+      curbGeos.push(buildRibbon(smoothR,s*7.2,0.15,0.25,roadHeights));
+      edgeGeos.push(buildRibbon(smoothR,s*6,0.1,0.16,roadHeights));
     }
     /* center dashes */
     for(i=0;i<smoothR.length-1;i++){
       if(i%3!==0)continue;
       a=smoothR[i];b=smoothR[i+1];dx=b[0]-a[0];dz=b[1]-a[1];ang=Math.atan2(dx,dz);
       var dg=new THREE.BoxGeometry(0.3,0.16,2.2);dg.rotateY(ang);
-      dg.translate((a[0]+b[0])/2,0.16,(a[1]+b[1])/2);dashGeos.push(dg);
+      dg.translate((a[0]+b[0])/2,0.16+(roadHeights[i]+roadHeights[i+1])/2,(a[1]+b[1])/2);dashGeos.push(dg);
     }
 
     /* route arrows */
@@ -624,7 +670,7 @@ export default function App(){
       var segL=Math.sqrt(dx*dx+dz*dz);arDist+=segL;
       if(arDist>=14){arDist-=14;
         var ag=new THREE.ConeGeometry(0.5,1.2,4);ag.rotateX(Math.PI/2);ag.rotateZ(-Math.atan2(dx,dz));
-        ag.translate(b[0],0.25,b[1]);arrowGeos.push(ag);}}
+        ag.translate(b[0],0.25+roadHeights[i+1],b[1]);arrowGeos.push(ag);}}
 
     /* merge road geometries into single meshes to reduce draw calls */
     var merged;
@@ -668,12 +714,13 @@ export default function App(){
         t=(bi+0.5)/bc;var off=20+Math.random()*12;
         var bx=a[0]+dx*t+px*s*off,bz2=a[1]+dz*t+pz*s*off;
         if(!canPlace(bx,bz2))continue;
+        var bTerrainY=getBusHeight(bx,bz2).y;
         var bw=6+Math.random()*9,bd=6+Math.random()*9,bh=8+Math.random()*25;
         m=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),bMats[Math.floor(Math.random()*bMats.length)]);
-        m.position.set(bx,bh/2,bz2);m.castShadow=true;m.receiveShadow=true;scene.add(m);
+        m.position.set(bx,bh/2+bTerrainY,bz2);m.castShadow=true;m.receiveShadow=true;scene.add(m);
         /* roof ledge */
         var ledge=new THREE.Mesh(new THREE.BoxGeometry(bw+0.6,0.3,bd+0.6),new THREE.MeshStandardMaterial({color:0x555555,roughness:0.6}));
-        ledge.position.set(bx,bh+0.15,bz2);ledge.castShadow=true;scene.add(ledge);
+        ledge.position.set(bx,bh+0.15+bTerrainY,bz2);ledge.castShadow=true;scene.add(ledge);
         /* windows - more detailed */
         var wr=Math.floor(bh/5),wc2=Math.floor(bw/3.5),r,c;
         for(r=0;r<wr;r++)for(c=0;c<wc2;c++){
@@ -682,7 +729,7 @@ export default function App(){
           var wmat=rng<0.25?winMat2:rng<0.5?winMat1:winDark;
           for(var f=-1;f<=1;f+=2){
             var wm=new THREE.Mesh(new THREE.PlaneGeometry(1.2,1.8),wmat);
-            wm.position.set(bx-bw/2+1.8+c*3.2,3+r*5,bz2+f*(bd/2+0.06));
+            wm.position.set(bx-bw/2+1.8+c*3.2,3+r*5+bTerrainY,bz2+f*(bd/2+0.06));
             if(f<0)wm.rotation.y=Math.PI;scene.add(wm);
           }
         }
@@ -692,9 +739,10 @@ export default function App(){
     for(i=0;i<45;i++){
       var bx3=-130+Math.random()*460,bz3=-190+Math.random()*400;
       if(!canPlace(bx3,bz3))continue;
+      var bTY3=getBusHeight(bx3,bz3).y;
       var bh3=5+Math.random()*16,bw3=5+Math.random()*7,bd3=5+Math.random()*7;
       m=new THREE.Mesh(new THREE.BoxGeometry(bw3,bh3,bd3),bMats[Math.floor(Math.random()*bMats.length)]);
-      m.position.set(bx3,bh3/2,bz3);m.castShadow=true;m.receiveShadow=true;scene.add(m);
+      m.position.set(bx3,bh3/2+bTY3,bz3);m.castShadow=true;m.receiveShadow=true;scene.add(m);
       placed.push([bx3,bz3]);obstacles.push({x:bx3,z:bz3,hw:bw3/2+1.5,hd:bd3/2+1.5});
     }
 
@@ -713,18 +761,19 @@ export default function App(){
       var treeOk=true;
       for(var ii3=0;ii3<placed.length;ii3++){if(dd(tx,tz2,placed[ii3][0],placed[ii3][1])<10){treeOk=false;break;}}
       if(!treeOk)continue;
+      var tTY=getBusHeight(tx,tz2).y;
       /* trunk - smoother cylinder */
       m=new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.45,4,8),trkMat);
-      m.position.set(tx,2,tz2);m.castShadow=true;scene.add(m);
+      m.position.set(tx,2+tTY,tz2);m.castShadow=true;scene.add(m);
       /* canopy - two spheres for fullness */
       var lsz=2+Math.random()*1.8;
       var lfm=lfMats[Math.floor(Math.random()*3)];
       m=new THREE.Mesh(new THREE.SphereGeometry(lsz,10,8),lfm);
-      m.position.set(tx,4.8+Math.random()*0.5,tz2);m.castShadow=true;scene.add(m);
+      m.position.set(tx,4.8+Math.random()*0.5+tTY,tz2);m.castShadow=true;scene.add(m);
       /* second smaller sphere offset */
       var ls2=lsz*0.7;
       m=new THREE.Mesh(new THREE.SphereGeometry(ls2,8,6),lfm);
-      m.position.set(tx+Math.random()*1.2-0.6,5.5+Math.random()*0.5,tz2+Math.random()*1.2-0.6);
+      m.position.set(tx+Math.random()*1.2-0.6,5.5+Math.random()*0.5+tTY,tz2+Math.random()*1.2-0.6);
       m.castShadow=true;scene.add(m);
       obstacles.push({x:tx,z:tz2,r:2.0});
     }
@@ -735,21 +784,22 @@ export default function App(){
     for(i=0;i<R.length-1;i+=2){
       a=R[i];b=R[i+1];dx=b[0]-a[0];dz=b[1]-a[1];len=Math.sqrt(dx*dx+dz*dz);
       ang=Math.atan2(dx,dz);
+      var lightH=getRouteHeight(wpDists[i]);
       for(s=-1;s<=1;s+=2){
         var lpx=a[0]+Math.cos(ang)*s*10;
         var lpz=a[1]-Math.sin(ang)*s*10;
         /* pole */
         m=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.12,5.5,6),poleMat);
-        m.position.set(lpx,2.75,lpz);m.castShadow=true;scene.add(m);
+        m.position.set(lpx,2.75+lightH,lpz);m.castShadow=true;scene.add(m);
         /* arm */
         m=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,2,4),poleMat);
-        m.position.set(lpx-s*0.8,5.2,lpz);m.rotation.z=s*Math.PI/2.3;scene.add(m);
+        m.position.set(lpx-s*0.8,5.2+lightH,lpz);m.rotation.z=s*Math.PI/2.3;scene.add(m);
         /* light */
         m=new THREE.Mesh(new THREE.SphereGeometry(0.25,6,5),lightBulbMat);
-        m.position.set(lpx-s*1.6,5,lpz);scene.add(m);
+        m.position.set(lpx-s*1.6,5+lightH,lpz);scene.add(m);
         /* small point light for glow */
         var pl=new THREE.PointLight(0xffddaa,0.15,20);
-        pl.position.set(lpx-s*1.6,4.8,lpz);
+        pl.position.set(lpx-s*1.6,4.8+lightH,lpz);
         scene.add(pl);
       }
     }
@@ -766,6 +816,7 @@ export default function App(){
 
     for(var si=0;si<STOPS.length;si++){
       var stop=STOPS[si],wp=R[stop.i];
+      var stopH=getRouteHeight(wpDists[stop.i]);
       /* compute average direction from incoming + outgoing segments for stable normal at corners */
       var dirX=0,dirZ=0;
       if(stop.i<R.length-1){var nxt=R[stop.i+1];dirX+=nxt[0]-wp[0];dirZ+=nxt[1]-wp[1];}
@@ -776,24 +827,24 @@ export default function App(){
       var sx=wp[0]+nx*14,sz=wp[1]+nz2*14;
       stopPositions.push({sx:sx,sz:sz,nx:nx,nz:nz2});
       /* shelter */
-      for(var ox=-1.5;ox<=1.5;ox+=3){m=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,3.2,8),pstMat);m.position.set(sx+ox,1.6,sz);m.castShadow=true;scene.add(m);}
-      m=new THREE.Mesh(new THREE.BoxGeometry(4,0.15,2.3),roofStopMat);m.position.set(sx,3.22,sz);m.castShadow=true;scene.add(m);
-      m=new THREE.Mesh(new THREE.BoxGeometry(4,3,0.08),glassBlueMat);m.position.set(sx,1.7,sz-1.1);scene.add(m);
+      for(var ox=-1.5;ox<=1.5;ox+=3){m=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,3.2,8),pstMat);m.position.set(sx+ox,1.6+stopH,sz);m.castShadow=true;scene.add(m);}
+      m=new THREE.Mesh(new THREE.BoxGeometry(4,0.15,2.3),roofStopMat);m.position.set(sx,3.22+stopH,sz);m.castShadow=true;scene.add(m);
+      m=new THREE.Mesh(new THREE.BoxGeometry(4,3,0.08),glassBlueMat);m.position.set(sx,1.7+stopH,sz-1.1);scene.add(m);
       /* sign */
-      m=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,3.8,6),pstMat);m.position.set(sx+2.3,1.9,sz+0.8);scene.add(m);
-      m=new THREE.Mesh(new THREE.BoxGeometry(1,1,0.1),redMat);m.position.set(sx+2.3,3.6,sz+0.8);scene.add(m);
+      m=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,3.8,6),pstMat);m.position.set(sx+2.3,1.9+stopH,sz+0.8);scene.add(m);
+      m=new THREE.Mesh(new THREE.BoxGeometry(1,1,0.1),redMat);m.position.set(sx+2.3,3.6+stopH,sz+0.8);scene.add(m);
       obstacles.push({x:sx,z:sz,hw:3,hd:2.5});
       /* bench */
-      m=new THREE.Mesh(new THREE.BoxGeometry(2.8,0.15,0.7),benchMat);m.position.set(sx,0.7,sz-0.4);m.castShadow=true;scene.add(m);
+      m=new THREE.Mesh(new THREE.BoxGeometry(2.8,0.15,0.7),benchMat);m.position.set(sx,0.7+stopH,sz-0.4);m.castShadow=true;scene.add(m);
       /* bench legs */
-      for(var bl=-1;bl<=1;bl+=2){m=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.6,0.1),pstMat);m.position.set(sx+bl*1.1,0.35,sz-0.4);scene.add(m);}
+      for(var bl=-1;bl<=1;bl+=2){m=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.6,0.1),pstMat);m.position.set(sx+bl*1.1,0.35+stopH,sz-0.4);scene.add(m);}
 
       /* ground ring glow */
       var ringMat=new THREE.MeshStandardMaterial({color:0x00ff88,emissive:0x00ff66,emissiveIntensity:0.5,transparent:true,opacity:0.35});
       var outerDisc=new THREE.Mesh(new THREE.CylinderGeometry(7,7,0.08,28),ringMat);
-      outerDisc.position.set(wp[0],0.12,wp[1]);scene.add(outerDisc);
+      outerDisc.position.set(wp[0],0.12+stopH,wp[1]);scene.add(outerDisc);
       var innerDisc=new THREE.Mesh(new THREE.CylinderGeometry(5.5,5.5,0.1,28),gndMat);
-      innerDisc.position.set(wp[0],0.13,wp[1]);scene.add(innerDisc);
+      innerDisc.position.set(wp[0],0.13+stopH,wp[1]);scene.add(innerDisc);
       stopRings.push(outerDisc);
 
       /* waiting figures */
@@ -804,8 +855,8 @@ export default function App(){
         var fb=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.28,1.1,8),bodyFig);fb.position.set(0,0.85,0);fg.add(fb);
         /* head */
         var fh=new THREE.Mesh(new THREE.SphereGeometry(0.22,8,6),headFig);fh.position.set(0,1.65,0);fg.add(fh);
-        fg.position.set(sx-1.2+fi*0.85,0,sz+0.5);fg.visible=false;
-        fg.userData={walkState:"idle",walkProgress:0,walkStartX:0,walkStartZ:0,walkEndX:0,walkEndZ:0,walkSpeed:5,paxIndex:-1,homeX:sx-1.2+fi*0.85,homeZ:sz+0.5};
+        fg.position.set(sx-1.2+fi*0.85,stopH,sz+0.5);fg.visible=false;
+        fg.userData={walkState:"idle",walkProgress:0,walkStartX:0,walkStartZ:0,walkEndX:0,walkEndZ:0,walkSpeed:5,paxIndex:-1,homeX:sx-1.2+fi*0.85,homeY:stopH,homeZ:sz+0.5};
         scene.add(fg);figs.push(fg);
       }
       waitFigs.push(figs);
@@ -921,7 +972,7 @@ export default function App(){
     }
 
     var initAng=Math.atan2(R[1][0]-R[0][0],R[1][1]-R[0][1])+Math.PI;
-    bus.position.set(R[0][0],0,R[0][1]);bus.rotation.y=initAng;
+    bus.position.set(R[0][0],getRouteHeight(0),R[0][1]);bus.rotation.y=initAng;
     scene.add(bus);
 
     /* ══ GAME STATE ══ */
@@ -947,12 +998,12 @@ export default function App(){
       g.crashed=false;g.crashTimer=0;g.damage=0;g.camShake=0;
       g.mathSolved=true;g.mathPrev=0;
       g.prevX=R[0][0];g.prevZ=R[0][1];g.heading=initAng;
-      bus.position.set(R[0][0],0,R[0][1]);bus.rotation.y=initAng;bus.rotation.z=0;bus.rotation.x=0;
+      bus.position.set(R[0][0],getRouteHeight(0),R[0][1]);bus.rotation.y=initAng;bus.rotation.z=0;bus.rotation.x=0;
       for(var ai=alightFigs.length-1;ai>=0;ai--)recycleAlightFig(alightFigs[ai]);
       for(var ssi=0;ssi<STOPS.length;ssi++){var wwc=0;
         for(var ppi=0;ppi<g.pax.length;ppi++)if(g.pax[ppi].origin===ssi&&!g.pax[ppi].on&&!g.pax[ppi].done)wwc++;
         for(var ffi=0;ffi<waitFigs[ssi].length;ffi++){var wf=waitFigs[ssi][ffi];wf.visible=ffi<wwc;
-          wf.position.set(wf.userData.homeX,0,wf.userData.homeZ);wf.position.y=0;wf.rotation.y=0;
+          wf.position.set(wf.userData.homeX,wf.userData.homeY||0,wf.userData.homeZ);wf.position.y=wf.userData.homeY||0;wf.rotation.y=0;
           wf.userData.walkState="idle";wf.userData.walkProgress=0;wf.userData.paxIndex=-1;}}
     };
 
@@ -969,8 +1020,8 @@ export default function App(){
         for(var ppi=0;ppi<g.pax.length;ppi++){var pp=g.pax[ppi];
           if(pp.on&&pp.dest===ssi&&!pp.done){
             bOff++;g.delivered++;g.score+=100;
-            var af=createAlightFig();af.position.set(doorX,0,doorZ);
-            af.userData.walkState="alighting";af.userData.walkProgress=0;
+            var af=createAlightFig();af.position.set(doorX,bus.position.y,doorZ);
+            af.userData.walkState="alighting";af.userData.walkProgress=0;af.userData.terrainY=bus.position.y;
             af.userData.walkStartX=doorX;af.userData.walkStartZ=doorZ;
             af.userData.walkEndX=sp.sx-1.2+bOff*0.85;af.userData.walkEndZ=sp.sz+0.5;
             af.userData.walkSpeed=5;af.userData.paxIndex=ppi;alightFigs.push(af);}}
@@ -996,7 +1047,7 @@ export default function App(){
           for(var wi3=0;wi3<waitFigs[ssi].length;wi3++){var wf2=waitFigs[ssi][wi3];
             if(wf2.userData.walkState==="boarding"){var pi10=wf2.userData.paxIndex;
               if(pi10>=0)g.pax[pi10].on=true;wf2.visible=false;
-              wf2.position.set(wf2.userData.homeX,0,wf2.userData.homeZ);
+              wf2.position.set(wf2.userData.homeX,wf2.userData.homeY||0,wf2.userData.homeZ);
               wf2.userData.walkState="idle";wf2.userData.walkProgress=0;}}
           var cnt=0;for(var ppi3=0;ppi3<g.pax.length;ppi3++)if(g.pax[ppi3].on)cnt++;
           var rem=0;for(var ppi4=0;ppi4<g.pax.length;ppi4++)if(g.pax[ppi4].on&&!g.pax[ppi4].done)rem++;
@@ -1018,7 +1069,7 @@ export default function App(){
           for(var wi4=0;wi4<waitFigs[ssi2].length;wi4++){var wf3=waitFigs[ssi2][wi4];
             if(wf3.userData.walkState==="boarding"){var pi11=wf3.userData.paxIndex;
               if(pi11>=0)g.pax[pi11].on=true;wf3.visible=false;
-              wf3.position.set(wf3.userData.homeX,0,wf3.userData.homeZ);
+              wf3.position.set(wf3.userData.homeX,wf3.userData.homeY||0,wf3.userData.homeZ);
               wf3.userData.walkState="idle";wf3.userData.walkProgress=0;}}
           for(var ai4=alightFigs.length-1;ai4>=0;ai4--){var af3=alightFigs[ai4],pi12=af3.userData.paxIndex;
             if(pi12>=0){g.pax[pi12].done=true;g.pax[pi12].on=false;}recycleAlightFig(af3);}
@@ -1071,6 +1122,8 @@ export default function App(){
         g.heading+=tf*dt*2;
         bus.position.x-=Math.sin(g.heading)*g.speed*dt;
         bus.position.z-=Math.cos(g.heading)*g.speed*dt;
+        var bT=getBusHeight(bus.position.x,bus.position.z);
+        bus.position.y=bT.y;
         bus.rotation.y=g.heading;
         bus.rotation.z=-g.steer*Math.min(Math.abs(g.speed)/30,1)*0.04;
 
@@ -1102,6 +1155,7 @@ export default function App(){
 
         if(hit&&!g.crashed){
           bus.position.x=g.prevX;bus.position.z=g.prevZ;
+          var revertT=getBusHeight(g.prevX,g.prevZ);bus.position.y=revertT.y;
           var impactSpd=Math.abs(g.speed);
           g.speed=0;g.crashed=true;g.crashTimer=2.5;
           g.camShake=Math.min(impactSpd/15,1.0);
@@ -1113,7 +1167,7 @@ export default function App(){
         if(g.crashTimer>0){
           bus.rotation.z+=Math.sin(g.crashTimer*25)*g.crashTimer*0.03;
           bus.rotation.x=Math.sin(g.crashTimer*18)*g.crashTimer*0.015;
-        }else{bus.rotation.x=0;}
+        }else{bus.rotation.x=bT?bT.pitch:0;}
 
         /* audio */
         if(audioRef.current){audioRef.current.updateEngine(g.speed,30);audioRef.current.updateMusic(dt);}
@@ -1144,13 +1198,13 @@ export default function App(){
             wfig.userData.walkProgress+=dt*wfig.userData.walkSpeed/Math.max(wd,0.1);
             if(wfig.userData.walkProgress>=1){var pidx=wfig.userData.paxIndex;
               if(pidx>=0)g.pax[pidx].on=true;wfig.visible=false;
-              wfig.position.set(wfig.userData.homeX,0,wfig.userData.homeZ);wfig.position.y=0;wfig.rotation.y=0;
+              wfig.position.set(wfig.userData.homeX,wfig.userData.homeY||0,wfig.userData.homeZ);wfig.position.y=wfig.userData.homeY||0;wfig.rotation.y=0;
               wfig.userData.walkState="idle";wfig.userData.walkProgress=0;wfig.userData.paxIndex=-1;
               var cn=0;for(var pk=0;pk<g.pax.length;pk++)if(g.pax[pk].on)cn++;g.onBus=cn;
             }else{var pr=wfig.userData.walkProgress;
               wfig.position.x=wfig.userData.walkStartX+(wfig.userData.walkEndX-wfig.userData.walkStartX)*pr;
               wfig.position.z=wfig.userData.walkStartZ+(wfig.userData.walkEndZ-wfig.userData.walkStartZ)*pr;
-              wfig.position.y=Math.sin(pr*Math.PI*4)*0.08;
+              wfig.position.y=(wfig.userData.homeY||0)+Math.sin(pr*Math.PI*4)*0.08;
               wfig.rotation.y=Math.atan2(wfig.userData.walkEndX-wfig.userData.walkStartX,wfig.userData.walkEndZ-wfig.userData.walkStartZ);}}}
         var idleShow=wwc2-bc4,shown=0;
         for(var ffi3=0;ffi3<waitFigs[ssi4].length;ffi3++){var wf4=waitFigs[ssi4][ffi3];
@@ -1166,7 +1220,7 @@ export default function App(){
         }else{var pr2=afig.userData.walkProgress;
           afig.position.x=afig.userData.walkStartX+(afig.userData.walkEndX-afig.userData.walkStartX)*pr2;
           afig.position.z=afig.userData.walkStartZ+(afig.userData.walkEndZ-afig.userData.walkStartZ)*pr2;
-          afig.position.y=Math.sin(pr2*Math.PI*4)*0.08;
+          afig.position.y=(afig.userData.terrainY||0)+Math.sin(pr2*Math.PI*4)*0.08;
           afig.rotation.y=Math.atan2(afig.userData.walkEndX-afig.userData.walkStartX,afig.userData.walkEndZ-afig.userData.walkStartZ);}}
 
       /* pulse stop rings */
@@ -1182,11 +1236,11 @@ export default function App(){
       /* camera */
       var dOff=new THREE.Vector3(Math.sin(g.heading)*22,10+Math.abs(g.speed)*0.12,Math.cos(g.heading)*22);
       camOff.lerp(dOff,dt*2.5);
-      var ct=new THREE.Vector3(bus.position.x+camOff.x,camOff.y,bus.position.z+camOff.z);
+      var ct=new THREE.Vector3(bus.position.x+camOff.x,bus.position.y+camOff.y,bus.position.z+camOff.z);
       if(g.camShake>0){var sa=g.camShake*1.5;
         ct.x+=Math.sin(performance.now()*0.05)*sa;ct.y+=Math.cos(performance.now()*0.07)*sa*0.5;ct.z+=Math.sin(performance.now()*0.06)*sa;}
       camera.position.lerp(ct,dt*4);
-      var la2=new THREE.Vector3(bus.position.x-Math.sin(g.heading)*8,2.5,bus.position.z-Math.cos(g.heading)*8);
+      var la2=new THREE.Vector3(bus.position.x-Math.sin(g.heading)*8,bus.position.y+2.5,bus.position.z-Math.cos(g.heading)*8);
       camLk.lerp(la2,dt*5);camera.lookAt(camLk);
 
       renderer.render(scene,camera);
